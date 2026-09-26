@@ -1,0 +1,53 @@
+# EC2 배포용 스택. deploy.yml 워크플로우가 이 파일로 기동한다.
+# 로컬 compose와 다른 점: 포트를 외부에 직접 열지 않고 NGINX가 리버스 프록시,
+# 프로필은 prod, 값은 EC2의 ~/backend/.env 에서 읽는다.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: cp-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: Asia/Seoul
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cp-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY}
+    expose:
+      - "8080"
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: cp-nginx
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  db-data:

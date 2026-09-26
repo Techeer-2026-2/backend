@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: ko-KR
+early_access: false
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - develop
+      - main
+  path_filters:
+    - "!**/build/**"
+    - "!**/.gradle/**"
+    - "!gradle/wrapper/**"
+    - "!**/*.jar"
+  path_instructions:
+    - path: "src/main/java/**/*.java"
+      instructions: |
+        Spring Boot 3.5 / Java 21 기준으로 리뷰한다.
+        - 팀 컨벤션: 클래스는 PascalCase, 메서드·필드는 camelCase, 상수는 ALL_CAPS.
+        - Controller 에 비즈니스 로직을 두지 않고 Service 로 위임했는지 확인한다.
+        - Entity 를 API 응답으로 직접 반환하지 않고 DTO 로 감쌌는지 확인한다.
+        - @Transactional 범위가 필요 이상으로 넓지 않은지 확인한다.
+        - 외부 API 키·DB 비밀번호 등이 코드에 하드코딩되지 않았는지 확인한다.
+        - 클릭 이벤트 처리에서 notification_id 기반 멱등성이 깨지지 않는지 확인한다.
+    - path: "src/test/java/**/*.java"
+      instructions: |
+        테스트가 실제 동작을 검증하는지(단순 호출 확인이 아닌지) 본다.
+        조건 분기마다 케이스가 있는지, 테스트 이름이 검증 내용을 설명하는지 확인한다.
+    - path: "**/*.{yml,yaml}"
+      instructions: |
+        시크릿이 평문으로 들어가 있지 않은지, 환경변수 치환을 쓰는지 확인한다.
+        GitHub Actions 워크플로우는 권한(permissions)이 최소인지 확인한다.
+chat:
+  auto_reply: true

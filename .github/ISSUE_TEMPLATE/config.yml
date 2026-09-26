@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 📚 팀 Notion
+    url: https://app.notion.com/p/2026-d-3c8dc21d58f080eb89e6c34d9651f266
+    about: 기능/API 명세서, ERD, 코드컨벤션은 Notion 을 확인해주세요.

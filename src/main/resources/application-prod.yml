@@ -1,0 +1,17 @@
+# EC2 배포 프로필
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+springdoc:
+  # 운영에서 Swagger UI 를 열어둘지는 팀 결정 사항.
+  # 데모/심사 편의를 위해 P1~P2 는 열어두고, 필요해지면 false 로 바꾼다.
+  swagger-ui:
+    enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.techeer.backend: INFO

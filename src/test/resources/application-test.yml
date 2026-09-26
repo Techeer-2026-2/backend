@@ -1,0 +1,12 @@
+# 테스트 프로필 — DB 접속 정보는 Testcontainers 가 @ServiceConnection 으로 주입한다.
+spring:
+  jpa:
+    hibernate:
+      # 테스트 컨테이너는 빈 DB 로 시작하므로 스키마를 만들어야 한다.
+      ddl-auto: create-drop
+    show-sql: false
+
+logging:
+  level:
+    org.testcontainers: WARN
+    com.github.dockerjava: WARN

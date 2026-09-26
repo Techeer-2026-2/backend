@@ -1,0 +1,67 @@
+spring:
+  application:
+    name: commute-playlist-backend
+
+  profiles:
+    default: local
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/commute_playlist}
+    username: ${SPRING_DATASOURCE_USERNAME:cp_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:cp_password}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # 운영에서는 절대 create/update 를 쓰지 않는다. 스키마는 마이그레이션으로 관리.
+      ddl-auto: ${JPA_DDL_AUTO:validate}
+    properties:
+      hibernate:
+        format_sql: true
+        default_batch_fetch_size: 100
+    open-in-view: false
+
+  jackson:
+    default-property-inclusion: non_null
+    time-zone: Asia/Seoul
+
+server:
+  port: 8080
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # 배포 검증·모니터링용 최소 노출. NGINX 에서 외부 접근은 차단한다.
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    display-request-duration: true
+  api-docs:
+    path: /v3/api-docs
+  default-produces-media-type: application/json
+
+# ---------- 외부 API ----------
+external:
+  itunes:
+    # 인증 불필요. CORS 미지원이라 프론트가 아닌 백엔드에서 호출한다.
+    base-url: https://itunes.apple.com
+    country: KR
+  openweather:
+    base-url: https://api.openweathermap.org/data/2.5
+    api-key: ${OPENWEATHER_API_KEY:}
+  kakao:
+    base-url: https://dapi.kakao.com
+    rest-api-key: ${KAKAO_REST_API_KEY:}
+
+logging:
+  level:
+    com.techeer.backend: ${LOG_LEVEL:INFO}

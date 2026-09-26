@@ -1,0 +1,12 @@
+# 로컬 개발 프로필 — docker compose 의 db 컨테이너를 바라본다.
+spring:
+  jpa:
+    hibernate:
+      # 로컬은 스키마 자동 생성 허용 (P1 초기 개발 편의)
+      ddl-auto: update
+    show-sql: true
+
+logging:
+  level:
+    com.techeer.backend: DEBUG
+    org.hibernate.SQL: DEBUG

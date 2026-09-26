@@ -1,0 +1,85 @@
+name: CI
+
+# 케빈님 피드백대로 CI 를 먼저 세팅하고 기능 개발을 시작한다.
+# PR 이 develop/main 으로 올라올 때마다 빌드 + 테스트가 돌고, 실패하면 머지를 막는다.
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+# 같은 PR 에 연속 push 하면 이전 실행을 취소해서 러너 시간을 낭비하지 않는다.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  build-test:
+    name: 빌드 + 테스트
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: 소스 체크아웃
+        uses: actions/checkout@v4
+
+      - name: JDK 21 설정
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Gradle 설정 (의존성 캐시 포함)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: gradlew 실행 권한
+        run: chmod +x ./gradlew
+
+      - name: 컴파일
+        run: ./gradlew compileJava compileTestJava --no-daemon
+
+      - name: 테스트
+        # Testcontainers 가 PostgreSQL 컨테이너를 띄운다 (ubuntu-latest 에 Docker 기본 탑재).
+        run: ./gradlew test --no-daemon
+
+      - name: 테스트 리포트 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: build/reports/tests/test
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: bootJar 빌드
+        run: ./gradlew bootJar --no-daemon -x test
+
+  docker-build:
+    name: Docker 이미지 빌드 검증
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build-test
+
+    steps:
+      - name: 소스 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Buildx 설정
+        uses: docker/setup-buildx-action@v3
+
+      # 배포 전에 Dockerfile 이 실제로 빌드되는지 확인한다.
+      # push 는 하지 않고 빌드만 (EC2 배포는 deploy.yml 이 담당).
+      - name: 이미지 빌드
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

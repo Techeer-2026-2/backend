@@ -1,0 +1,79 @@
+name: Deploy to EC2
+
+# 통합문서 4장 기준: main 브랜치 merge 시 배포.
+# develop 은 통합 브랜치라 배포하지 않는다 (CI 만 돈다).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 배포는 동시에 두 개가 돌면 안 된다. 진행 중인 배포를 취소하지 않고 큐에 세운다.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: EC2 재배포
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+
+    steps:
+      - name: 소스 체크아웃
+        uses: actions/checkout@v4
+
+      - name: SSH 키 준비
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: 코드 전송 (rsync)
+        run: |
+          rsync -az --delete \
+            --exclude='.git' --exclude='.github' --exclude='build' \
+            --exclude='.gradle' --exclude='docs' --exclude='.env' \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            ./ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/backend/
+
+      - name: EC2 에서 재배포
+        # ⚠️ 프리티어(t2/t3.micro, 1GB) OOM 주의:
+        #    컨테이너가 돌고 있는 상태로 build 하면 메모리가 터져 Exit 137 이 난다.
+        #    그래서 backend 를 먼저 stop → build → up 순서로 실행한다.
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} bash -euo pipefail <<'REMOTE'
+            cd ~/backend
+            docker compose -f docker-compose.prod.yml stop backend || true
+            docker compose -f docker-compose.prod.yml build backend
+            docker compose -f docker-compose.prod.yml up -d db backend nginx
+            docker image prune -f
+          REMOTE
+
+      - name: 배포 검증 (헬스 체크)
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} bash -euo pipefail <<'REMOTE'
+            for i in $(seq 1 40); do
+              if curl -sf http://localhost/api/v1/health > /dev/null; then
+                echo "✅ 배포 성공 — 헬스 체크 통과"
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "❌ 헬스 체크 실패 — 최근 로그:"
+            cd ~/backend && docker compose -f docker-compose.prod.yml logs --tail 80 backend
+            exit 1
+          REMOTE
+
+      - name: 실패 시 로그 수집
+        if: failure()
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+            "cd ~/backend && docker compose -f docker-compose.prod.yml ps && docker compose -f docker-compose.prod.yml logs --tail 120" || true

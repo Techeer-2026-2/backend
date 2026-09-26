@@ -1,0 +1,41 @@
+# 로컬 개발용 스택 — 팀원 누구나 `docker compose up -d` 한 번으로 동일 환경 기동
+# Phase 1 범위: PostgreSQL + API 서버만. Redis/Kafka/ClickHouse는 P3에서 추가.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: cp-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-commute_playlist}
+      POSTGRES_USER: ${POSTGRES_USER:-cp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cp_password}
+      TZ: Asia/Seoul
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cp_user} -d ${POSTGRES_DB:-commute_playlist}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cp-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-commute_playlist}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-cp_user}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-cp_password}
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+
+volumes:
+  db-data:
