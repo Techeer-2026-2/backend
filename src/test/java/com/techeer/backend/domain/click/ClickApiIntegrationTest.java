@@ -61,6 +61,9 @@ class ClickApiIntegrationTest {
     @Autowired
     private CampaignStatsRepository campaignStatsRepository;
 
+    /**
+     * 각 테스트가 저장한 클릭, 캠페인 집계와 노출을 삭제해 다음 테스트를 격리한다.
+     */
     @AfterEach
     void tearDown() {
         clickEventRepository.deleteAll();
@@ -68,6 +71,9 @@ class ClickApiIntegrationTest {
         adImpressionRepository.deleteAll();
     }
 
+    /**
+     * 첫 클릭이 201 응답과 함께 한 건 저장되고 캠페인 클릭 수가 1이 되는지 검증한다.
+     */
     @Test
     @DisplayName("첫 클릭은 201 로 기록되고 캠페인 클릭 수가 1 오른다")
     void firstClickIsRecorded() throws Exception {
@@ -84,6 +90,9 @@ class ClickApiIntegrationTest {
         assertThat(clickCount()).isEqualTo(1);
     }
 
+    /**
+     * 중복 클릭이 기존 클릭 ID와 200을 반환하고 저장 건수와 집계를 유지하는지 검증한다.
+     */
     @Test
     @DisplayName("같은 notificationId 로 다시 클릭하면 200 과 기존 클릭을 돌려주고 집계는 그대로다")
     void duplicateClickIsIdempotent() throws Exception {
@@ -99,6 +108,9 @@ class ClickApiIntegrationTest {
         assertThat(clickCount()).isEqualTo(1);
     }
 
+    /**
+     * 같은 캠페인의 서로 다른 노출을 클릭하면 클릭 수가 누적되는지 검증한다.
+     */
     @Test
     @DisplayName("서로 다른 노출의 클릭은 같은 캠페인 집계에 누적된다")
     void clicksAccumulatePerCampaign() throws Exception {
@@ -111,6 +123,9 @@ class ClickApiIntegrationTest {
         assertThat(clickCount()).isEqualTo(2);
     }
 
+    /**
+     * 동일 노출에 대한 동시 요청 중 하나만 클릭을 생성하고 집계도 한 번만 증가하는지 검증한다.
+     */
     @Test
     @DisplayName("같은 클릭이 동시에 여러 번 들어와도 한 번만 기록된다")
     void concurrentDuplicateClicksAreRecordedOnce() throws Exception {
@@ -147,6 +162,9 @@ class ClickApiIntegrationTest {
         assertThat(clickCount()).isEqualTo(1);
     }
 
+    /**
+     * 없는 알림 ID가 404와 IMPRESSION_NOT_FOUND를 반환하고 클릭을 저장하지 않는지 검증한다.
+     */
     @Test
     @DisplayName("존재하지 않는 notificationId 는 404 를 돌려준다")
     void unknownNotificationReturnsNotFound() throws Exception {
@@ -157,6 +175,9 @@ class ClickApiIntegrationTest {
         assertThat(clickEventRepository.count()).isZero();
     }
 
+    /**
+     * 빈 알림 ID가 요청 검증에서 거부되어 400과 INVALID_INPUT을 반환하는지 검증한다.
+     */
     @Test
     @DisplayName("notificationId 가 비어 있으면 400 을 돌려준다")
     void blankNotificationReturnsBadRequest() throws Exception {
@@ -165,6 +186,9 @@ class ClickApiIntegrationTest {
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
     }
 
+    /**
+     * 지정한 알림 ID로 공통 테스트 캠페인과 사용자에 대한 노출을 저장한다.
+     */
     private void saveImpression(String notificationId) {
         adImpressionRepository.save(AdImpression.builder()
                 .notificationId(notificationId)
@@ -174,10 +198,16 @@ class ClickApiIntegrationTest {
                 .build());
     }
 
+    /**
+     * 공통 테스트 캠페인의 집계 행을 조회해 현재 클릭 수를 반환한다.
+     */
     private long clickCount() {
         return campaignStatsRepository.findById(CAMPAIGN_ID).orElseThrow().getClickCount();
     }
 
+    /**
+     * 지정한 알림 ID를 JSON 본문에 담은 클릭 기록 POST 요청을 생성한다.
+     */
     private RequestBuilder clickRequest(String notificationId) {
         return post("/api/v1/clicks")
                 .contentType(MediaType.APPLICATION_JSON)

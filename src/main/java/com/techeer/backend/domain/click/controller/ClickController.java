@@ -27,6 +27,12 @@ public class ClickController {
 
     private final ClickService clickService;
 
+    /**
+     * 클릭을 기록하고 신규 클릭은 201, 중복 클릭은 200 상태로 반환한다.
+     *
+     * @param request 클릭한 노출의 알림 ID를 담은 요청
+     * @return 최초 기록된 클릭 정보와 생성 여부에 따른 HTTP 상태
+     */
     @Operation(
             summary = "클릭 이벤트 기록",
             description = "배너 클릭을 기록하고 캠페인 클릭 수를 1 올린다. "

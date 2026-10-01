@@ -27,6 +27,15 @@ public class ClickService {
     private final ClickEventRepository clickEventRepository;
     private final CampaignStatsRepository campaignStatsRepository;
 
+    /**
+     * 노출의 클릭을 멱등하게 기록하고 새 클릭일 때만 캠페인 클릭 수를 증가시킨다.
+     * 클릭 저장과 집계 갱신은 하나의 트랜잭션에서 처리한다.
+     *
+     * @param notificationId 클릭한 노출의 알림 ID
+     * @return 최초 기록된 클릭 정보와 이번 요청의 신규 생성 여부
+     * @throws BusinessException 알림 ID에 해당하는 노출이 없는 경우
+     * @throws IllegalStateException 저장 또는 중복 확인 후 클릭을 조회할 수 없는 경우
+     */
     @Transactional
     public ClickResult recordClick(String notificationId) {
         AdImpression impression = adImpressionRepository.findById(notificationId)

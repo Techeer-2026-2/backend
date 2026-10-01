@@ -10,6 +10,12 @@ import org.springframework.data.repository.query.Param;
 
 public interface ClickEventRepository extends JpaRepository<ClickEvent, Long> {
 
+    /**
+     * 알림 ID에 대해 최초로 기록된 클릭을 조회한다.
+     *
+     * @param notificationId 클릭한 노출의 알림 ID
+     * @return 기록된 클릭, 없으면 빈 Optional
+     */
     Optional<ClickEvent> findByNotificationId(String notificationId);
 
     /**
