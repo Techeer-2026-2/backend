@@ -9,6 +9,7 @@ import com.techeer.backend.domain.impression.repository.AdImpressionRepository;
 import com.techeer.backend.domain.stats.repository.CampaignStatsRepository;
 import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ public class ClickService {
     private final AdImpressionRepository adImpressionRepository;
     private final ClickEventRepository clickEventRepository;
     private final CampaignStatsRepository campaignStatsRepository;
+    private final Clock clock;
 
     /**
      * 노출의 클릭을 멱등하게 기록하고 새 클릭일 때만 캠페인 클릭 수를 증가시킨다.
@@ -41,7 +43,7 @@ public class ClickService {
         AdImpression impression = adImpressionRepository.findById(notificationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.IMPRESSION_NOT_FOUND));
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         boolean created = clickEventRepository.insertIfAbsent(
                 notificationId, impression.getCampaignId(), impression.getTargetUserId(), now) == 1;
 

@@ -4,8 +4,10 @@ import java.util.stream.Collectors;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -33,8 +35,7 @@ public class GlobalExceptionHandler {
         String message = e.getBindingResult().getFieldErrors().stream()
                 .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
                 .collect(Collectors.joining(", "));
-        return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
-                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, message));
+        return invalidInput(message);
     }
 
     /**
@@ -45,7 +46,21 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException e) {
+        return invalidInput("요청 본문(JSON)을 읽을 수 없습니다.");
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingParameter(MissingServletRequestParameterException e) {
+        return invalidInput(e.getParameterName() + ": 필수 값입니다.");
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        return invalidInput(e.getName() + ": 형식이 올바르지 않습니다.");
+    }
+
+    private ResponseEntity<ErrorResponse> invalidInput(String message) {
         return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
-                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, "요청 본문(JSON)을 읽을 수 없습니다."));
+                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, message));
     }
 }
