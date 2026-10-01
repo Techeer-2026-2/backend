@@ -19,6 +19,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -118,23 +119,28 @@ class ClickApiIntegrationTest {
         ExecutorService executor = Executors.newFixedThreadPool(requestCount);
         CountDownLatch startSignal = new CountDownLatch(1);
 
-        List<Future<Boolean>> results = new ArrayList<>();
-        for (int i = 0; i < requestCount; i++) {
-            Callable<Boolean> task = () -> {
-                startSignal.await();
-                return clickService.recordClick(NOTIFICATION_ID).created();
-            };
-            results.add(executor.submit(task));
-        }
-        startSignal.countDown();
-
         int createdCount = 0;
-        for (Future<Boolean> result : results) {
-            if (result.get()) {
-                createdCount++;
+        try {
+            List<Future<Boolean>> results = new ArrayList<>();
+            for (int i = 0; i < requestCount; i++) {
+                Callable<Boolean> task = () -> {
+                    startSignal.await();
+                    return clickService.recordClick(NOTIFICATION_ID).created();
+                };
+                results.add(executor.submit(task));
             }
+            startSignal.countDown();
+
+            for (Future<Boolean> result : results) {
+                if (result.get()) {
+                    createdCount++;
+                }
+            }
+        } finally {
+            // 실패하거나 인터럽트돼도 남은 작업이 끝난 뒤에 tearDown 이 DB 를 비우도록 기다린다.
+            executor.shutdownNow();
+            executor.awaitTermination(10, TimeUnit.SECONDS);
         }
-        executor.shutdown();
 
         assertThat(createdCount).isEqualTo(1);
         assertThat(clickEventRepository.count()).isEqualTo(1);
