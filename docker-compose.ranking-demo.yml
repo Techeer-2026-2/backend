@@ -1,0 +1,29 @@
+# 가상 데이터 확인용 독립 DB. 기존 docker-compose.yml의 DB 볼륨을 사용하지 않는다.
+services:
+  ranking-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ranking_demo
+      POSTGRES_USER: ${POSTGRES_USER:-cp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cp_password}
+    volumes:
+      - ranking-demo-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cp_user} -d ranking_demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  ranking-app:
+    build: .
+    depends_on:
+      ranking-db:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: local,ranking-demo
+      SPRING_DATASOURCE_URL: jdbc:postgresql://ranking-db:5432/ranking_demo
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-cp_user}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-cp_password}
+    ports:
+      - "127.0.0.1:8081:8080"
+volumes:
+  ranking-demo-data:

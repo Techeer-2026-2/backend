@@ -8,6 +8,11 @@ group = 'com.techeer'
 version = '0.0.1-SNAPSHOT'
 description = 'commute-playlist backend'
 
+// OneDrive 등의 동기화 폴더에서 빌드 출력 파일 잠금을 피할 때만 지정한다.
+if (project.hasProperty('buildOutputDir')) {
+	layout.buildDirectory = file(project.property('buildOutputDir'))
+}
+
 java {
 	toolchain {
 		languageVersion = JavaLanguageVersion.of(21)
@@ -33,6 +38,9 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	implementation 'com.uber:h3:4.5.0'
+	implementation 'org.flywaydb:flyway-core'
+	runtimeOnly 'org.flywaydb:flyway-database-postgresql'
 
 	// Swagger UI — /swagger-ui.html, OpenAPI 문서는 /v3/api-docs
 	implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"

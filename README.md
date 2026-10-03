@@ -1,5 +1,14 @@
 # 통근길 플레이리스트 — Backend
 
+## 공간 기반 음악 랭킹
+
+재생 시작 위치를 기준으로 직전 한 시간의 고유 완주 청취자 Top 20을 집계합니다.
+H3 주변·상위 셀·도시·전체 fallback, 중복 방지, 재집계 및 차트 화면을 제공합니다.
+
+실행·API·플레이어 연결 방법은 **[음악 랭킹 개발 가이드](docs/RANKING.md)**를 참고하세요.
+가상 데이터로 실행: `docker compose -f docker-compose.ranking-demo.yml up --build -d`
+→ <http://localhost:8081/rankings/>
+
 통근 정보(노선/소요시간)에 맞춰 음악을 추천하고, 홈 화면에 연령대 기반 배너 광고를 노출하는
 음악 + 광고 통합 플랫폼의 **백엔드 API 서버**입니다.
 
