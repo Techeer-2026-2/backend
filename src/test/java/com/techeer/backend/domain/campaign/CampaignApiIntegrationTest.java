@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.techeer.backend.TestcontainersConfiguration;
+import com.techeer.backend.domain.auth.jwt.JwtTokenProvider;
 import com.techeer.backend.domain.campaign.entity.Campaign;
 import com.techeer.backend.domain.campaign.entity.CampaignStatus;
 import com.techeer.backend.domain.campaign.repository.CampaignRepository;
@@ -20,6 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -47,6 +49,9 @@ class CampaignApiIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private JwtTokenProvider jwtTokenProvider;
 
     @AfterEach
     void tearDown() {
@@ -107,11 +112,21 @@ class CampaignApiIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
 
+        assertThat(campaignRepository.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("토큰 없이 요청하면 401 을 돌려준다")
+    void rejectsUnauthenticatedRequests() throws Exception {
         mockMvc.perform(post("/api/v1/campaigns")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(campaignJson(daysFromNow(1), daysFromNow(3), "null")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_REQUIRED"));
+
+        mockMvc.perform(get("/api/v1/campaigns"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_REQUIRED"));
 
         assertThat(campaignRepository.count()).isZero();
     }
@@ -220,14 +235,18 @@ class CampaignApiIntegrationTest {
         return LocalDateTime.now().plusDays(days).truncatedTo(ChronoUnit.SECONDS);
     }
 
+    private String bearer(Long userId) {
+        return "Bearer " + jwtTokenProvider.createAccessToken(userId);
+    }
+
     private RequestBuilder createRequest(Long userId, String json) {
         return post("/api/v1/campaigns")
-                .param("userId", String.valueOf(userId))
+                .header(HttpHeaders.AUTHORIZATION, bearer(userId))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json);
     }
 
     private MockHttpServletRequestBuilder listRequest(Long userId) {
-        return get("/api/v1/campaigns").param("userId", String.valueOf(userId));
+        return get("/api/v1/campaigns").header(HttpHeaders.AUTHORIZATION, bearer(userId));
     }
 }
