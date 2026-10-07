@@ -1,6 +1,7 @@
 package com.techeer.backend.domain.auth.controller;
 
 import com.techeer.backend.domain.auth.dto.LoginRequest;
+import com.techeer.backend.domain.auth.dto.LogoutRequest;
 import com.techeer.backend.domain.auth.dto.RefreshRequest;
 import com.techeer.backend.domain.auth.dto.TokenResponse;
 import com.techeer.backend.domain.auth.service.AuthService;
@@ -12,6 +13,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -66,5 +68,26 @@ public class AuthController {
     @PostMapping("/refresh")
     public TokenResponse refresh(@Valid @RequestBody RefreshRequest request) {
         return authService.refresh(request);
+    }
+
+    /**
+     * 로그아웃한다. 본문의 refresh token 을 폐기하며 성공하면 본문 없이 204 로 응답한다.
+     *
+     * @param request 로그아웃할 refresh token
+     * @return 204 No Content
+     */
+    @Operation(
+            summary = "로그아웃",
+            description = "refresh token 을 폐기해 더 이상 토큰을 갱신할 수 없게 한다. 이미 로그아웃한 토큰으로 다시 "
+                    + "요청해도 204 이다. 이미 발급된 access token 은 만료(30분)될 때까지 유효하다.")
+    @ApiResponse(responseCode = "204", description = "로그아웃 완료")
+    @ApiResponse(responseCode = "400", description = "요청 값 오류",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "만료·위조된 refresh token",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@Valid @RequestBody LogoutRequest request) {
+        authService.logout(request);
+        return ResponseEntity.noContent().build();
     }
 }

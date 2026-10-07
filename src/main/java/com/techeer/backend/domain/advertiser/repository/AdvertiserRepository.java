@@ -38,4 +38,16 @@ public interface AdvertiserRepository extends JpaRepository<Advertiser, Long> {
             @Param("userId") Long userId,
             @Param("oldHash") String oldHash,
             @Param("newHash") String newHash);
+
+    /**
+     * 저장된 refresh token 해시가 hash 와 같을 때만 지운다(로그아웃). 지운 행 수(0 또는 1)를 돌려준다.
+     *
+     * <p>조건에 해시를 넣은 이유는 이미 교체된 옛 토큰으로 로그아웃을 요청해도 지금 쓰고 있는 새 세션이 끊기지 않게 하기 위해서다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update Advertiser a set a.refreshTokenHash = null
+            where a.userId = :userId and a.refreshTokenHash = :hash
+            """)
+    int clearRefreshTokenHash(@Param("userId") Long userId, @Param("hash") String hash);
 }
