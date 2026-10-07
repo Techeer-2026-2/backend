@@ -33,6 +33,8 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      # 비어 있으면 compose 가 배포 단계에서 바로 멈춘다(서버가 기본 키로 뜨는 일을 막는다).
+      JWT_SECRET: ${JWT_SECRET:?EC2 의 ~/backend/.env 에 JWT_SECRET 을 설정하세요}
       OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY}
     expose:

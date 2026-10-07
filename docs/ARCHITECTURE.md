@@ -83,6 +83,7 @@ CREATE TABLE advertisers (  -- 광고주 (음악 앱 일반 유저의 users 와 
     password_hash VARCHAR(256),
     business_name VARCHAR(128),
     plan VARCHAR(16),
+    refresh_token_hash VARCHAR(64),  -- 로그인 때 발급한 refresh token 의 SHA-256 해시(원문 아님). 로그아웃하면 NULL, 광고주당 1개 세션
     created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
 );
 
