@@ -1,6 +1,7 @@
 package com.techeer.backend.domain.auth.controller;
 
 import com.techeer.backend.domain.auth.dto.LoginRequest;
+import com.techeer.backend.domain.auth.dto.RefreshRequest;
 import com.techeer.backend.domain.auth.dto.TokenResponse;
 import com.techeer.backend.domain.auth.service.AuthService;
 import com.techeer.backend.global.exception.ErrorResponse;
@@ -45,5 +46,25 @@ public class AuthController {
     @PostMapping("/login")
     public TokenResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    /**
+     * refresh token 으로 토큰을 다시 발급한다. 쓴 refresh token 은 폐기되고 새 refresh token 이 함께 나간다.
+     *
+     * @param request 기존 refresh token
+     * @return 새 access/refresh token
+     */
+    @Operation(
+            summary = "토큰 갱신",
+            description = "refresh token 으로 새 access token 을 발급한다. refresh token 도 새것으로 교체되므로 "
+                    + "응답의 refresh token 을 다시 저장해야 하고, 이전 refresh token 은 더 쓸 수 없다.")
+    @ApiResponse(responseCode = "200", description = "갱신 성공")
+    @ApiResponse(responseCode = "400", description = "요청 값 오류",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "만료·위조·이미 사용했거나 폐기된 refresh token",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @PostMapping("/refresh")
+    public TokenResponse refresh(@Valid @RequestBody RefreshRequest request) {
+        return authService.refresh(request);
     }
 }
