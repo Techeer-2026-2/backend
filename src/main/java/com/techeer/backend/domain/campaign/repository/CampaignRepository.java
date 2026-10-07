@@ -1,10 +1,12 @@
 package com.techeer.backend.domain.campaign.repository;
 
 import com.techeer.backend.domain.campaign.entity.Campaign;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -13,6 +15,12 @@ public interface CampaignRepository extends JpaRepository<Campaign, Long> {
     List<Campaign> findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(Long userId);
 
     Optional<Campaign> findByCampaignIdAndDeletedAtIsNull(Long campaignId);
+
+    /**
+     * 수정용 조회. 행을 잠가서 동시에 들어온 수정이 서로의 변경을 덮어쓰지 않게 한다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<Campaign> findWithLockByCampaignIdAndDeletedAtIsNull(Long campaignId);
 
     /**
      * 연령대가 맞고 지금 진행 중인 캠페인 1개를 무작위로 고른다.

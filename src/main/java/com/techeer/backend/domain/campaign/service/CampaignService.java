@@ -14,6 +14,7 @@ import com.techeer.backend.global.exception.ErrorCode;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,13 +33,12 @@ public class CampaignService {
     /**
      * 캠페인을 등록한다. 배너 매칭 대상이 되도록 ACTIVE 로 저장하며, 실제 노출은 노출 기간 안에서만 일어난다.
      *
-     * @throws BusinessException 종료 시각이 시작 시각보다 뒤가 아닌 경우
+     * @throws BusinessException 종료 시각이 시작 시각보다 뒤가 아니거나 이미 지난 경우
      */
     @Transactional
     public CampaignResponse createCampaign(Long userId, CampaignCreateRequest request) {
-        if (!request.endAt().isAfter(request.startAt())) {
-            throw new BusinessException(ErrorCode.INVALID_CAMPAIGN_PERIOD);
-        }
+        LocalDateTime now = LocalDateTime.now(clock);
+        validatePeriod(request.startAt(), request.endAt(), now);
 
         Campaign campaign = campaignRepository.save(Campaign.builder()
                 .userId(userId)
@@ -51,7 +51,7 @@ public class CampaignService {
                 .timeEnd(request.endAt())
                 .status(CampaignStatus.ACTIVE)
                 .build());
-        return CampaignResponse.of(campaign, LocalDateTime.now(clock));
+        return CampaignResponse.of(campaign, now);
     }
 
     /**
@@ -82,11 +82,12 @@ public class CampaignService {
      * 요청에 담긴 필드만 수정한다. 대기 상태는 전체, 진행중은 문구와 배너 이미지만 수정할 수 있고 종료 후에는 수정할 수 없다.
      *
      * @throws BusinessException 캠페인이 없거나 내 캠페인이 아닌 경우, 현재 상태에서 바꿀 수 없는 필드를 보낸 경우,
-     *         수정 결과 종료 시각이 시작 시각보다 뒤가 아닌 경우
+     *         수정 결과 종료 시각이 시작 시각보다 뒤가 아니거나 이미 지난 경우
      */
     @Transactional
     public CampaignDetailResponse updateCampaign(Long userId, Long campaignId, CampaignUpdateRequest request) {
-        Campaign campaign = findMyCampaign(userId, campaignId);
+        Campaign campaign = checkOwner(userId,
+                campaignRepository.findWithLockByCampaignIdAndDeletedAtIsNull(campaignId));
         LocalDateTime now = LocalDateTime.now(clock);
 
         CampaignProgress progress = CampaignProgress.of(campaign.getTimeStart(), campaign.getTimeEnd(), now);
@@ -99,10 +100,7 @@ public class CampaignService {
 
         campaign.updateContent(request.title(), request.body(), request.imageUrl());
         campaign.updateDelivery(request.linkUrl(), request.targetAgeGroup(), request.startAt(), request.endAt());
-        if (campaign.getTimeStart() != null && campaign.getTimeEnd() != null
-                && !campaign.getTimeEnd().isAfter(campaign.getTimeStart())) {
-            throw new BusinessException(ErrorCode.INVALID_CAMPAIGN_PERIOD);
-        }
+        validatePeriod(campaign.getTimeStart(), campaign.getTimeEnd(), now);
 
         // 응답의 updatedAt 에 이번 수정 시각이 담기도록 바로 반영한다.
         campaignRepository.flush();
@@ -121,12 +119,31 @@ public class CampaignService {
     }
 
     private Campaign findMyCampaign(Long userId, Long campaignId) {
-        Campaign campaign = campaignRepository.findByCampaignIdAndDeletedAtIsNull(campaignId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.CAMPAIGN_NOT_FOUND));
+        return checkOwner(userId, campaignRepository.findByCampaignIdAndDeletedAtIsNull(campaignId));
+    }
+
+    private Campaign checkOwner(Long userId, Optional<Campaign> found) {
+        Campaign campaign = found.orElseThrow(() -> new BusinessException(ErrorCode.CAMPAIGN_NOT_FOUND));
         if (!campaign.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.CAMPAIGN_ACCESS_DENIED);
         }
         return campaign;
+    }
+
+    /**
+     * 시작·종료 시각이 비어 있으면(기간 제한 없는 기존 캠페인) 해당 검사는 건너뛴다.
+     * 시작 시각은 과거여도 된다 (등록·수정 즉시 노출 시작).
+     */
+    private void validatePeriod(LocalDateTime timeStart, LocalDateTime timeEnd, LocalDateTime now) {
+        if (timeEnd == null) {
+            return;
+        }
+        if (timeStart != null && !timeEnd.isAfter(timeStart)) {
+            throw new BusinessException(ErrorCode.INVALID_CAMPAIGN_PERIOD);
+        }
+        if (!timeEnd.isAfter(now)) {
+            throw new BusinessException(ErrorCode.CAMPAIGN_PERIOD_ALREADY_ENDED);
+        }
     }
 
     private CampaignDetailResponse toDetail(Campaign campaign, LocalDateTime now) {

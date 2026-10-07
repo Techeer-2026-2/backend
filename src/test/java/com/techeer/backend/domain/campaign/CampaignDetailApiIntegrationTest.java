@@ -15,6 +15,13 @@ import com.techeer.backend.domain.campaign.repository.CampaignRepository;
 import com.techeer.backend.domain.stats.repository.CampaignStatsRepository;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -236,7 +243,7 @@ class CampaignDetailApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("수정 결과 종료 시각이 시작 시각보다 뒤가 아니거나 값이 비어 있으면 400 을 돌려준다")
+    @DisplayName("수정 결과 노출 기간이 올바르지 않거나 값이 공백이면 400 을 돌려준다")
     void rejectsInvalidUpdate() throws Exception {
         Campaign campaign = savePendingCampaign();
 
@@ -249,9 +256,60 @@ class CampaignDetailApiIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
 
+        for (String field : List.of("title", "body", "imageUrl", "targetAgeGroup")) {
+            mockMvc.perform(patchRequest(campaign, USER_ID, "{\"" + field + "\": \"   \"}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+        }
+
+        mockMvc.perform(patchRequest(campaign, USER_ID,
+                        "{\"startAt\": \"" + daysFromNow(-3) + "\", \"endAt\": \"" + daysFromNow(-1) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CAMPAIGN_PERIOD_ALREADY_ENDED"));
+
         Campaign unchanged = reload(campaign);
         assertThat(unchanged.getTitle()).isEqualTo(campaign.getTitle());
         assertThat(unchanged.getTimeStart()).isEqualTo(campaign.getTimeStart());
+        assertThat(unchanged.getTimeEnd()).isEqualTo(campaign.getTimeEnd());
+    }
+
+    @Test
+    @DisplayName("대기 상태 캠페인의 시작 시각을 과거로 바꾸면 바로 진행중이 된다")
+    void startsImmediatelyWhenStartMovedToPast() throws Exception {
+        Campaign campaign = savePendingCampaign();
+
+        mockMvc.perform(patchRequest(campaign, USER_ID, "{\"startAt\": \"" + daysFromNow(-1) + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ONGOING"));
+    }
+
+    @Test
+    @DisplayName("동시에 들어온 수정은 서로의 변경을 덮어쓰지 않는다")
+    void concurrentUpdatesDoNotOverwriteEachOther() throws Exception {
+        Campaign campaign = saveOngoingCampaign();
+        List<String> patches = List.of("{\"title\": \"동시 수정 제목\"}", "{\"body\": \"동시 수정 본문\"}");
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(patches.size());
+        try {
+            List<Future<Integer>> results = new ArrayList<>();
+            for (String json : patches) {
+                results.add(executor.submit(() -> {
+                    start.await();
+                    return mockMvc.perform(patchRequest(campaign, USER_ID, json))
+                            .andReturn().getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+            for (Future<Integer> result : results) {
+                assertThat(result.get(10, TimeUnit.SECONDS)).isEqualTo(200);
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+
+        Campaign updated = reload(campaign);
+        assertThat(updated.getTitle()).isEqualTo("동시 수정 제목");
+        assertThat(updated.getBody()).isEqualTo("동시 수정 본문");
     }
 
     @Test
