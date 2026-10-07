@@ -18,6 +18,13 @@ public enum ErrorCode {
     CAMPAIGN_FIELD_NOT_EDITABLE(HttpStatus.CONFLICT, "진행중인 캠페인은 문구와 배너 이미지만 수정할 수 있습니다."),
     CAMPAIGN_ENDED(HttpStatus.CONFLICT, "종료된 캠페인은 수정할 수 없습니다."),
 
+    // 광고주
+    EMAIL_DUPLICATED(HttpStatus.CONFLICT, "이미 가입된 이메일입니다."),
+    AUTH_REQUIRED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
+    ADVERTISER_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 광고주입니다."),
+    INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."),
+    INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 토큰입니다."),
+
     // 타겟 유저
     TARGET_USER_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 유저입니다."),
 

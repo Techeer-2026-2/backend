@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.techeer.backend.TestcontainersConfiguration;
+import com.techeer.backend.domain.auth.jwt.JwtTokenProvider;
 import com.techeer.backend.domain.campaign.entity.Campaign;
 import com.techeer.backend.domain.campaign.entity.CampaignStatus;
 import com.techeer.backend.domain.campaign.repository.CampaignRepository;
@@ -21,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -52,6 +54,9 @@ class CampaignDetailApiIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private JwtTokenProvider jwtTokenProvider;
+
     @AfterEach
     void tearDown() {
         campaignStatsRepository.deleteAll();
@@ -64,7 +69,7 @@ class CampaignDetailApiIntegrationTest {
         Campaign campaign = saveOngoingCampaign();
         saveStats(campaign, 1200, 300);
 
-        mockMvc.perform(get(campaignUrl(campaign)).param("userId", String.valueOf(USER_ID)))
+        mockMvc.perform(get(campaignUrl(campaign)).header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.campaignId").value(campaign.getCampaignId()))
                 .andExpect(jsonPath("$.title").value(campaign.getTitle()))
@@ -78,7 +83,7 @@ class CampaignDetailApiIntegrationTest {
     void getsCampaignWithoutStats() throws Exception {
         Campaign campaign = savePendingCampaign();
 
-        mockMvc.perform(get(campaignUrl(campaign)).param("userId", String.valueOf(USER_ID)))
+        mockMvc.perform(get(campaignUrl(campaign)).header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PENDING"))
                 .andExpect(jsonPath("$.impressionCount").value(0))
@@ -89,13 +94,14 @@ class CampaignDetailApiIntegrationTest {
     @DisplayName("없는 캠페인은 404, 남의 캠페인은 403 을 돌려준다")
     void rejectsUnknownOrOthersCampaign() throws Exception {
         Campaign campaign = saveOngoingCampaign();
-        String others = String.valueOf(OTHER_USER_ID);
+        String othersToken = bearer(OTHER_USER_ID);
 
-        mockMvc.perform(get("/api/v1/campaigns/" + UNKNOWN_CAMPAIGN_ID).param("userId", String.valueOf(USER_ID)))
+        mockMvc.perform(get("/api/v1/campaigns/" + UNKNOWN_CAMPAIGN_ID)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("CAMPAIGN_NOT_FOUND"));
 
-        mockMvc.perform(get(campaignUrl(campaign)).param("userId", others))
+        mockMvc.perform(get(campaignUrl(campaign)).header(HttpHeaders.AUTHORIZATION, othersToken))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CAMPAIGN_ACCESS_DENIED"));
 
@@ -103,9 +109,33 @@ class CampaignDetailApiIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CAMPAIGN_ACCESS_DENIED"));
 
-        mockMvc.perform(delete(campaignUrl(campaign)).param("userId", others))
+        mockMvc.perform(delete(campaignUrl(campaign)).header(HttpHeaders.AUTHORIZATION, othersToken))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CAMPAIGN_ACCESS_DENIED"));
+
+        Campaign unchanged = reload(campaign);
+        assertThat(unchanged.getTitle()).isEqualTo(campaign.getTitle());
+        assertThat(unchanged.getDeletedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("토큰 없이 요청하면 401 을 돌려준다")
+    void rejectsUnauthenticatedRequests() throws Exception {
+        Campaign campaign = saveOngoingCampaign();
+
+        mockMvc.perform(get(campaignUrl(campaign)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_REQUIRED"));
+
+        mockMvc.perform(patch(campaignUrl(campaign))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\": \"바뀐 제목\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_REQUIRED"));
+
+        mockMvc.perform(delete(campaignUrl(campaign)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_REQUIRED"));
 
         Campaign unchanged = reload(campaign);
         assertThat(unchanged.getTitle()).isEqualTo(campaign.getTitle());
@@ -229,20 +259,20 @@ class CampaignDetailApiIntegrationTest {
     void deletesCampaign() throws Exception {
         Campaign campaign = saveOngoingCampaign();
         saveStats(campaign, 10, 2);
-        String userId = String.valueOf(USER_ID);
+        String myToken = bearer(USER_ID);
 
-        mockMvc.perform(delete(campaignUrl(campaign)).param("userId", userId))
+        mockMvc.perform(delete(campaignUrl(campaign)).header(HttpHeaders.AUTHORIZATION, myToken))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(get(campaignUrl(campaign)).param("userId", userId))
+        mockMvc.perform(get(campaignUrl(campaign)).header(HttpHeaders.AUTHORIZATION, myToken))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("CAMPAIGN_NOT_FOUND"));
 
-        mockMvc.perform(get("/api/v1/campaigns").param("userId", userId))
+        mockMvc.perform(get("/api/v1/campaigns").header(HttpHeaders.AUTHORIZATION, myToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
 
-        mockMvc.perform(delete(campaignUrl(campaign)).param("userId", userId))
+        mockMvc.perform(delete(campaignUrl(campaign)).header(HttpHeaders.AUTHORIZATION, myToken))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("CAMPAIGN_NOT_FOUND"));
 
@@ -288,13 +318,17 @@ class CampaignDetailApiIntegrationTest {
         return LocalDateTime.now().plusDays(days).truncatedTo(ChronoUnit.SECONDS);
     }
 
+    private String bearer(Long userId) {
+        return "Bearer " + jwtTokenProvider.createAccessToken(userId);
+    }
+
     private String campaignUrl(Campaign campaign) {
         return "/api/v1/campaigns/" + campaign.getCampaignId();
     }
 
     private RequestBuilder patchRequest(Campaign campaign, Long userId, String json) {
         return patch(campaignUrl(campaign))
-                .param("userId", String.valueOf(userId))
+                .header(HttpHeaders.AUTHORIZATION, bearer(userId))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json);
     }
