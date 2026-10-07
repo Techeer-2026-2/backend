@@ -10,6 +10,7 @@ import com.techeer.backend.TestcontainersConfiguration;
 import com.techeer.backend.domain.campaign.entity.Campaign;
 import com.techeer.backend.domain.campaign.entity.CampaignStatus;
 import com.techeer.backend.domain.campaign.repository.CampaignRepository;
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.AfterEach;
@@ -20,6 +21,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.RequestBuilder;
@@ -42,6 +44,9 @@ class CampaignApiIntegrationTest {
 
     @Autowired
     private CampaignRepository campaignRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @AfterEach
     void tearDown() {
@@ -124,9 +129,29 @@ class CampaignApiIntegrationTest {
         mockMvc.perform(listRequest(USER_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[?(@.title == '남의 캠페인')]").isEmpty())
                 .andExpect(jsonPath("$[?(@.title == '대기')].status").value("PENDING"))
                 .andExpect(jsonPath("$[?(@.title == '진행중')].status").value("ONGOING"))
                 .andExpect(jsonPath("$[?(@.title == '종료')].status").value("ENDED"));
+    }
+
+    @Test
+    @DisplayName("목록은 최근 등록순으로 돌려준다")
+    void listsNewestFirst() throws Exception {
+        // 저장 순서와 등록 시각 순서를 다르게 해서 정렬이 created_at 기준인지 확인한다.
+        Campaign oldest = saveCampaign(USER_ID, "가장 오래됨", daysFromNow(-1), daysFromNow(1));
+        Campaign newest = saveCampaign(USER_ID, "가장 최근", daysFromNow(-1), daysFromNow(1));
+        Campaign middle = saveCampaign(USER_ID, "중간", daysFromNow(-1), daysFromNow(1));
+        setCreatedAt(oldest, daysFromNow(-3));
+        setCreatedAt(middle, daysFromNow(-2));
+        setCreatedAt(newest, daysFromNow(-1));
+
+        mockMvc.perform(listRequest(USER_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[0].title").value("가장 최근"))
+                .andExpect(jsonPath("$[1].title").value("중간"))
+                .andExpect(jsonPath("$[2].title").value("가장 오래됨"));
     }
 
     @Test
@@ -171,6 +196,12 @@ class CampaignApiIntegrationTest {
                 .timeEnd(timeEnd)
                 .status(CampaignStatus.ACTIVE)
                 .build());
+    }
+
+    // created_at 은 감사(auditing)로 채워지고 수정할 수 없는 컬럼이라 SQL 로 직접 바꾼다.
+    private void setCreatedAt(Campaign campaign, LocalDateTime createdAt) {
+        jdbcTemplate.update("UPDATE campaigns SET created_at = ? WHERE campaign_id = ?",
+                Timestamp.valueOf(createdAt), campaign.getCampaignId());
     }
 
     private String campaignJson(LocalDateTime startAt, LocalDateTime endAt, String linkUrlJson) {
