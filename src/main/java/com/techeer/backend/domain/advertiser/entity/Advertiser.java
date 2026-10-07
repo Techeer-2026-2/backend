@@ -44,6 +44,10 @@ public class Advertiser extends BaseEntity {
     @Column(nullable = false, length = 16)
     private Plan plan;
 
+    /** 현재 유효한 refresh token 의 SHA-256 해시. 로그아웃 상태이거나 로그인한 적이 없으면 null. */
+    @Column(length = 64)
+    private String refreshTokenHash;
+
     private Advertiser(String email, String passwordHash, String businessName) {
         this.email = email;
         this.passwordHash = passwordHash;
@@ -56,5 +60,12 @@ public class Advertiser extends BaseEntity {
      */
     public static Advertiser create(String email, String passwordHash, String businessName) {
         return new Advertiser(email, passwordHash, businessName);
+    }
+
+    /**
+     * 유효한 refresh token 의 해시를 바꾼다. 새로 로그인하면 이전 토큰은 더 이상 쓸 수 없게 된다.
+     */
+    public void changeRefreshTokenHash(String refreshTokenHash) {
+        this.refreshTokenHash = refreshTokenHash;
     }
 }
