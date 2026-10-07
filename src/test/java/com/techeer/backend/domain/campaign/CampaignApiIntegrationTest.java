@@ -62,14 +62,12 @@ class CampaignApiIntegrationTest {
         mockMvc.perform(createRequest(USER_ID, campaignJson(startAt, endAt, "\"https://example.com/comeback\"")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.campaignId").isNumber())
-                .andExpect(jsonPath("$.artistId").value(12))
                 .andExpect(jsonPath("$.title").value("OOO 컴백 D-3"))
                 .andExpect(jsonPath("$.linkUrl").value("https://example.com/comeback"))
                 .andExpect(jsonPath("$.status").value("PENDING"));
 
         Campaign saved = campaignRepository.findAll().get(0);
         assertThat(saved.getUserId()).isEqualTo(USER_ID);
-        assertThat(saved.getArtistId()).isEqualTo(12L);
         assertThat(saved.getTargetAgeGroup()).isEqualTo("20s");
         assertThat(saved.getTimeStart()).isEqualTo(startAt);
         assertThat(saved.getTimeEnd()).isEqualTo(endAt);
@@ -187,7 +185,6 @@ class CampaignApiIntegrationTest {
     private Campaign saveCampaign(Long userId, String title, LocalDateTime timeStart, LocalDateTime timeEnd) {
         return campaignRepository.save(Campaign.builder()
                 .userId(userId)
-                .artistId(12L)
                 .title(title)
                 .body("10월 10일 오후 6시 신곡 공개")
                 .imageUrl("https://example.com/banner.png")
@@ -207,7 +204,6 @@ class CampaignApiIntegrationTest {
     private String campaignJson(LocalDateTime startAt, LocalDateTime endAt, String linkUrlJson) {
         return """
                 {
-                  "artistId": 12,
                   "title": "OOO 컴백 D-3",
                   "body": "10월 10일 오후 6시 신곡 공개",
                   "imageUrl": "https://example.com/banner.png",

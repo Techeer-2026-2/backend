@@ -7,7 +7,6 @@ import java.time.LocalDateTime;
 @Schema(description = "캠페인")
 public record CampaignResponse(
         @Schema(description = "캠페인 ID", example = "10") Long campaignId,
-        @Schema(description = "컴백 광고 대상 아티스트 ID", example = "12") Long artistId,
         @Schema(description = "배너 제목", example = "OOO 컴백 D-3") String title,
         @Schema(description = "배너 본문") String body,
         @Schema(description = "배너 이미지 URL") String imageUrl,
@@ -21,7 +20,6 @@ public record CampaignResponse(
     public static CampaignResponse of(Campaign campaign, LocalDateTime now) {
         return new CampaignResponse(
                 campaign.getCampaignId(),
-                campaign.getArtistId(),
                 campaign.getTitle(),
                 campaign.getBody(),
                 campaign.getImageUrl(),

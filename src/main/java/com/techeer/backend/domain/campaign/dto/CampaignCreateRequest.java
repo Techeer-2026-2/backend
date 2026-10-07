@@ -8,9 +8,6 @@ import java.time.LocalDateTime;
 
 @Schema(description = "캠페인 등록 요청")
 public record CampaignCreateRequest(
-        @Schema(description = "컴백 광고 대상 아티스트 ID", example = "12")
-        @NotNull
-        Long artistId,
         @Schema(description = "배너 제목", example = "OOO 컴백 D-3")
         @NotBlank
         @Size(max = 128)

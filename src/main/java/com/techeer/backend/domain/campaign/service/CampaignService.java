@@ -38,7 +38,6 @@ public class CampaignService {
 
         Campaign campaign = campaignRepository.save(Campaign.builder()
                 .userId(userId)
-                .artistId(request.artistId())
                 .title(request.title())
                 .body(request.body())
                 .imageUrl(request.imageUrl())

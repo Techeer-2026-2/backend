@@ -31,9 +31,6 @@ public class Campaign extends BaseEntity {
     @Column(nullable = false)
     private Long userId;
 
-    // 컴백 광고의 대상 아티스트
-    private Long artistId;
-
     @Column(nullable = false, length = 128)
     private String title;
 
@@ -62,10 +59,9 @@ public class Campaign extends BaseEntity {
     private CampaignStatus status;
 
     @Builder
-    private Campaign(Long userId, Long artistId, String title, String body, String imageUrl, String linkUrl,
+    private Campaign(Long userId, String title, String body, String imageUrl, String linkUrl,
             String targetAgeGroup, LocalDateTime timeStart, LocalDateTime timeEnd, CampaignStatus status) {
         this.userId = userId;
-        this.artistId = artistId;
         this.title = title;
         this.body = body;
         this.imageUrl = imageUrl;
