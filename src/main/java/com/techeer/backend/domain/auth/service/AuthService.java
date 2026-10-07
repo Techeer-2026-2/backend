@@ -3,9 +3,11 @@ package com.techeer.backend.domain.auth.service;
 import com.techeer.backend.domain.advertiser.entity.Advertiser;
 import com.techeer.backend.domain.advertiser.repository.AdvertiserRepository;
 import com.techeer.backend.domain.auth.dto.LoginRequest;
+import com.techeer.backend.domain.auth.dto.RefreshRequest;
 import com.techeer.backend.domain.auth.dto.TokenResponse;
 import com.techeer.backend.domain.auth.jwt.JwtTokenProvider;
 import com.techeer.backend.domain.auth.jwt.TokenHasher;
+import com.techeer.backend.domain.auth.jwt.TokenType;
 import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
 import java.util.Locale;
@@ -62,5 +64,33 @@ public class AuthService {
         String refreshToken = jwtTokenProvider.createRefreshToken(advertiser.getUserId());
         advertiser.changeRefreshTokenHash(TokenHasher.sha256Hex(refreshToken));
         return TokenResponse.of(accessToken, refreshToken, jwtTokenProvider.accessTokenExpiresInSeconds());
+    }
+
+    /**
+     * refresh token 으로 새 access token 을 발급한다. 이때 refresh token 도 새것으로 교체(회전)하고 이전 것은 폐기한다.
+     *
+     * <p>서명·만료가 맞아도 DB 에 저장된 해시와 다르면 거절한다. 이미 한 번 쓴 토큰, 로그아웃한 토큰,
+     * 다른 기기에서 다시 로그인하기 전의 토큰, 탈퇴한 계정의 토큰이 여기에 걸린다.
+     * 같은 토큰으로 동시에 여러 번 요청해도 DB 의 조건부 UPDATE 덕분에 한 번만 성공한다.
+     *
+     * @param request 기존 refresh token
+     * @return 새로 발급한 access/refresh token
+     * @throws BusinessException 토큰이 유효하지 않거나 이미 폐기된 경우
+     */
+    @Transactional
+    public TokenResponse refresh(RefreshRequest request) {
+        Long advertiserId = jwtTokenProvider.parseAdvertiserId(request.refreshToken(), TokenType.REFRESH);
+
+        String accessToken = jwtTokenProvider.createAccessToken(advertiserId);
+        String newRefreshToken = jwtTokenProvider.createRefreshToken(advertiserId);
+
+        int rotated = advertiserRepository.rotateRefreshTokenHash(
+                advertiserId,
+                TokenHasher.sha256Hex(request.refreshToken()),
+                TokenHasher.sha256Hex(newRefreshToken));
+        if (rotated == 0) {
+            throw new BusinessException(ErrorCode.INVALID_TOKEN);
+        }
+        return TokenResponse.of(accessToken, newRefreshToken, jwtTokenProvider.accessTokenExpiresInSeconds());
     }
 }
