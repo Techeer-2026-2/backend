@@ -1,10 +1,10 @@
-package com.techeer.backend.domain.owner.repository;
+package com.techeer.backend.domain.advertiser.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.techeer.backend.TestcontainersConfiguration;
-import com.techeer.backend.domain.owner.entity.Owner;
+import com.techeer.backend.domain.advertiser.entity.Advertiser;
 import com.techeer.backend.global.config.ClockConfig;
 import com.techeer.backend.global.config.JpaConfig;
 import org.junit.jupiter.api.DisplayName;
@@ -17,7 +17,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
- * OwnerRepository 를 실제 PostgreSQL(Testcontainers)에 붙여 검증한다. 실행에는 Docker 가 필요하다.
+ * AdvertiserRepository 를 실제 PostgreSQL(Testcontainers)에 붙여 검증한다. 실행에는 Docker 가 필요하다.
  *
  * <p>@DataJpaTest 는 각 테스트를 트랜잭션으로 감싸고 끝나면 롤백하므로 테스트끼리 데이터가 섞이지 않는다.
  * JPA 슬라이스 테스트는 @Configuration 을 자동으로 읽지 않으므로, created_at 자동 기록에 필요한
@@ -27,15 +27,15 @@ import org.springframework.test.context.ActiveProfiles;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
 @Import({TestcontainersConfiguration.class, JpaConfig.class, ClockConfig.class})
-class OwnerRepositoryTest {
+class AdvertiserRepositoryTest {
 
     @Autowired
-    private OwnerRepository ownerRepository;
+    private AdvertiserRepository advertiserRepository;
 
     @Test
     @DisplayName("저장하면 id 가 생기고 plan 은 free, 생성 시각이 채워진다")
     void saveAssignsIdAndDefaults() {
-        Owner saved = ownerRepository.saveAndFlush(Owner.create("a@test.com", "hash", "테커 카페"));
+        Advertiser saved = advertiserRepository.saveAndFlush(Advertiser.create("a@test.com", "hash", "테커 카페"));
 
         assertThat(saved.getUserId()).isNotNull();
         assertThat(saved.getPlan()).isEqualTo("free");
@@ -46,22 +46,22 @@ class OwnerRepositoryTest {
     @Test
     @DisplayName("이메일로 존재 여부와 조회가 된다")
     void findByEmail() {
-        ownerRepository.saveAndFlush(Owner.create("a@test.com", "hash", "테커 카페"));
+        advertiserRepository.saveAndFlush(Advertiser.create("a@test.com", "hash", "테커 카페"));
 
-        assertThat(ownerRepository.existsByEmail("a@test.com")).isTrue();
-        assertThat(ownerRepository.existsByEmail("none@test.com")).isFalse();
-        assertThat(ownerRepository.findByEmail("a@test.com"))
+        assertThat(advertiserRepository.existsByEmail("a@test.com")).isTrue();
+        assertThat(advertiserRepository.existsByEmail("none@test.com")).isFalse();
+        assertThat(advertiserRepository.findByEmail("a@test.com"))
                 .get()
-                .extracting(Owner::getBusinessName)
+                .extracting(Advertiser::getBusinessName)
                 .isEqualTo("테커 카페");
     }
 
     @Test
     @DisplayName("같은 이메일을 두 번 저장하면 DB unique 제약 위반이 난다")
     void duplicateEmailViolatesUnique() {
-        ownerRepository.saveAndFlush(Owner.create("a@test.com", "hash", "테커 카페"));
+        advertiserRepository.saveAndFlush(Advertiser.create("a@test.com", "hash", "테커 카페"));
 
-        assertThatThrownBy(() -> ownerRepository.saveAndFlush(Owner.create("a@test.com", "hash2", "다른 가게")))
+        assertThatThrownBy(() -> advertiserRepository.saveAndFlush(Advertiser.create("a@test.com", "hash2", "다른 가게")))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 }
