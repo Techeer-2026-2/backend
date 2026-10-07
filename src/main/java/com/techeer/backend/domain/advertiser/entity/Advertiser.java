@@ -68,4 +68,11 @@ public class Advertiser extends BaseEntity {
     public void changeRefreshTokenHash(String refreshTokenHash) {
         this.refreshTokenHash = refreshTokenHash;
     }
+
+    /**
+     * 사업자명을 바꾼다. 이메일·요금제처럼 다른 값은 이 메서드로 바꿀 수 없다.
+     */
+    public void changeBusinessName(String businessName) {
+        this.businessName = businessName;
+    }
 }

@@ -1,7 +1,9 @@
 package com.techeer.backend.domain.advertiser.service;
 
+import com.techeer.backend.domain.advertiser.dto.AdvertiserResponse;
 import com.techeer.backend.domain.advertiser.dto.SignupRequest;
 import com.techeer.backend.domain.advertiser.dto.SignupResponse;
+import com.techeer.backend.domain.advertiser.dto.UpdateAdvertiserRequest;
 import com.techeer.backend.domain.advertiser.entity.Advertiser;
 import com.techeer.backend.domain.advertiser.repository.AdvertiserRepository;
 import com.techeer.backend.global.exception.BusinessException;
@@ -49,5 +51,37 @@ public class AdvertiserService {
             throw new BusinessException(ErrorCode.EMAIL_DUPLICATED);
         }
         return SignupResponse.from(advertiser);
+    }
+
+    /**
+     * 광고주 본인 정보를 조회한다. 읽기만 하므로 readOnly 트랜잭션으로 연다.
+     *
+     * @param advertiserId 광고주 ID
+     * @return 광고주 정보 (비밀번호 제외)
+     * @throws BusinessException 없거나 탈퇴한 광고주인 경우
+     */
+    @Transactional(readOnly = true)
+    public AdvertiserResponse getMe(Long advertiserId) {
+        return AdvertiserResponse.from(findActive(advertiserId));
+    }
+
+    /**
+     * 사업자명을 수정한다. 영속 상태의 엔티티 값을 바꾸면 트랜잭션이 끝날 때 JPA 가 UPDATE 를 실행한다(더티 체킹).
+     *
+     * @param advertiserId 광고주 ID
+     * @param request 새 사업자명
+     * @return 수정된 광고주 정보
+     * @throws BusinessException 없거나 탈퇴한 광고주인 경우
+     */
+    @Transactional
+    public AdvertiserResponse updateMe(Long advertiserId, UpdateAdvertiserRequest request) {
+        Advertiser advertiser = findActive(advertiserId);
+        advertiser.changeBusinessName(request.businessName().trim());
+        return AdvertiserResponse.from(advertiser);
+    }
+
+    private Advertiser findActive(Long advertiserId) {
+        return advertiserRepository.findByUserIdAndDeletedAtIsNull(advertiserId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ADVERTISER_NOT_FOUND));
     }
 }
