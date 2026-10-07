@@ -26,6 +26,7 @@ repositories {
 
 ext {
 	springdocVersion = '2.8.6'
+	jjwtVersion = '0.12.6'
 }
 
 dependencies {
@@ -33,6 +34,14 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+	// 비밀번호 bcrypt 해시용. starter-security 를 쓰면 모든 API 가 401 로 잠기므로 암호화 모듈만 추가한다.
+	implementation 'org.springframework.security:spring-security-crypto'
+
+	// JWT 발급·검증. Spring Boot 가 버전을 관리하지 않는 라이브러리라 버전을 직접 지정한다.
+	implementation "io.jsonwebtoken:jjwt-api:${jjwtVersion}"
+	runtimeOnly "io.jsonwebtoken:jjwt-impl:${jjwtVersion}"
+	runtimeOnly "io.jsonwebtoken:jjwt-jackson:${jjwtVersion}"
 
 	// Swagger UI — /swagger-ui.html, OpenAPI 문서는 /v3/api-docs
 	implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"

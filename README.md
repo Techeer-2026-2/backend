@@ -140,8 +140,9 @@ backend/
 | `EC2_USER` | SSH 계정 (Amazon Linux 는 `ec2-user`, Ubuntu 는 `ubuntu`) |
 | `EC2_SSH_KEY` | EC2 접속용 **개인키 전문** (`-----BEGIN ... KEY-----` 포함) |
 
-> iTunes Search API 는 키가 필요 없습니다. `OPENWEATHER_API_KEY` / `KAKAO_REST_API_KEY` 는
+> iTunes Search API 는 키가 필요 없습니다. `OPENWEATHER_API_KEY` / `KAKAO_REST_API_KEY` / `JWT_SECRET` 은
 > EC2 의 `~/backend/.env` 에 둡니다 (Actions 가 `.env` 를 rsync 에서 제외합니다).
+> `JWT_SECRET`(32바이트 이상, 예: `openssl rand -base64 48`)이 없으면 운영 배포가 멈춥니다.
 
 배포 워크플로우는 `production` 환경을 사용합니다. Secrets 가 등록되기 전에는 실패하므로,
 EC2 준비 전까지는 `main` 으로 머지하지 않거나 워크플로우를 비활성화해 두세요.
