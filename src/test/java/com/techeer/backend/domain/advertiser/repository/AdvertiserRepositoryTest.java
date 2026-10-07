@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.techeer.backend.TestcontainersConfiguration;
 import com.techeer.backend.domain.advertiser.entity.Advertiser;
+import com.techeer.backend.domain.advertiser.entity.Plan;
 import com.techeer.backend.global.config.ClockConfig;
 import com.techeer.backend.global.config.JpaConfig;
 import org.junit.jupiter.api.DisplayName;
@@ -33,12 +34,12 @@ class AdvertiserRepositoryTest {
     private AdvertiserRepository advertiserRepository;
 
     @Test
-    @DisplayName("저장하면 id 가 생기고 plan 은 free, 생성 시각이 채워진다")
+    @DisplayName("저장하면 id 가 생기고 plan 은 FREE, 생성 시각이 채워진다")
     void saveAssignsIdAndDefaults() {
         Advertiser saved = advertiserRepository.saveAndFlush(Advertiser.create("a@test.com", "hash", "테커 카페"));
 
         assertThat(saved.getUserId()).isNotNull();
-        assertThat(saved.getPlan()).isEqualTo("free");
+        assertThat(saved.getPlan()).isEqualTo(Plan.FREE);
         assertThat(saved.getCreatedAt()).isNotNull();
         assertThat(saved.getDeletedAt()).isNull();
     }

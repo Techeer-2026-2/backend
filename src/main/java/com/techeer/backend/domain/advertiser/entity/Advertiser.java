@@ -3,6 +3,8 @@ package com.techeer.backend.domain.advertiser.entity;
 import com.techeer.backend.global.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -25,8 +27,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Advertiser extends BaseEntity {
 
-    private static final String DEFAULT_PLAN = "free";
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long userId;
@@ -40,14 +40,15 @@ public class Advertiser extends BaseEntity {
     @Column(nullable = false, length = 128)
     private String businessName;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
-    private String plan;
+    private Plan plan;
 
     private Advertiser(String email, String passwordHash, String businessName) {
         this.email = email;
         this.passwordHash = passwordHash;
         this.businessName = businessName;
-        this.plan = DEFAULT_PLAN;
+        this.plan = Plan.FREE;
     }
 
     /**
