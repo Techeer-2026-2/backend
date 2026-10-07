@@ -3,6 +3,7 @@ package com.techeer.backend.domain.auth.service;
 import com.techeer.backend.domain.advertiser.entity.Advertiser;
 import com.techeer.backend.domain.advertiser.repository.AdvertiserRepository;
 import com.techeer.backend.domain.auth.dto.LoginRequest;
+import com.techeer.backend.domain.auth.dto.LogoutRequest;
 import com.techeer.backend.domain.auth.dto.RefreshRequest;
 import com.techeer.backend.domain.auth.dto.TokenResponse;
 import com.techeer.backend.domain.auth.jwt.JwtTokenProvider;
@@ -92,5 +93,21 @@ public class AuthService {
             throw new BusinessException(ErrorCode.INVALID_TOKEN);
         }
         return TokenResponse.of(accessToken, newRefreshToken, jwtTokenProvider.accessTokenExpiresInSeconds());
+    }
+
+    /**
+     * 로그아웃한다. 저장된 refresh token 해시를 지워서 이 토큰으로는 더 이상 갱신할 수 없게 한다.
+     *
+     * <p>이미 로그아웃했거나 이미 교체된 옛 토큰이어도 에러 없이 성공으로 처리한다(여러 번 요청해도 결과가 같다).
+     * 옛 토큰으로는 지금 쓰는 새 세션을 끊지 못한다. 이미 만들어 준 access token 은 만료될 때까지(30분) 유효하다.
+     * 그 사이를 막으려면 access token 블랙리스트가 필요한데 Redis 가 없어 이번 범위에서는 하지 않는다.
+     *
+     * @param request 로그아웃할 refresh token
+     * @throws BusinessException 서명·만료·형식이 올바르지 않은 토큰인 경우
+     */
+    @Transactional
+    public void logout(LogoutRequest request) {
+        Long advertiserId = jwtTokenProvider.parseAdvertiserId(request.refreshToken(), TokenType.REFRESH);
+        advertiserRepository.clearRefreshTokenHash(advertiserId, TokenHasher.sha256Hex(request.refreshToken()));
     }
 }
