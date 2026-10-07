@@ -1,11 +1,14 @@
 package com.techeer.backend.domain.campaign.service;
 
 import com.techeer.backend.domain.campaign.dto.CampaignCreateRequest;
+import com.techeer.backend.domain.campaign.dto.CampaignDetailResponse;
 import com.techeer.backend.domain.campaign.dto.CampaignProgress;
 import com.techeer.backend.domain.campaign.dto.CampaignResponse;
+import com.techeer.backend.domain.campaign.dto.CampaignUpdateRequest;
 import com.techeer.backend.domain.campaign.entity.Campaign;
 import com.techeer.backend.domain.campaign.entity.CampaignStatus;
 import com.techeer.backend.domain.campaign.repository.CampaignRepository;
+import com.techeer.backend.domain.stats.repository.CampaignStatsRepository;
 import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
 import java.time.Clock;
@@ -16,13 +19,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 캠페인 등록·목록 조회. 대기/진행중/종료는 저장하지 않고 노출 기간으로 계산한다.
+ * 캠페인 등록·조회·수정·삭제. 대기/진행중/종료는 저장하지 않고 노출 기간으로 계산한다.
  */
 @Service
 @RequiredArgsConstructor
 public class CampaignService {
 
     private final CampaignRepository campaignRepository;
+    private final CampaignStatsRepository campaignStatsRepository;
     private final Clock clock;
 
     /**
@@ -61,5 +65,73 @@ public class CampaignService {
                 .map(campaign -> CampaignResponse.of(campaign, now))
                 .filter(campaign -> progress == null || campaign.status() == progress)
                 .toList();
+    }
+
+    /**
+     * 캠페인 1건을 노출수·클릭수와 함께 돌려준다. 아직 노출된 적이 없으면 둘 다 0 이다.
+     *
+     * @throws BusinessException 캠페인이 없거나 삭제된 경우, 내 캠페인이 아닌 경우
+     */
+    @Transactional(readOnly = true)
+    public CampaignDetailResponse getCampaign(Long userId, Long campaignId) {
+        Campaign campaign = findMyCampaign(userId, campaignId);
+        return toDetail(campaign, LocalDateTime.now(clock));
+    }
+
+    /**
+     * 요청에 담긴 필드만 수정한다. 대기 상태는 전체, 진행중은 문구와 배너 이미지만 수정할 수 있고 종료 후에는 수정할 수 없다.
+     *
+     * @throws BusinessException 캠페인이 없거나 내 캠페인이 아닌 경우, 현재 상태에서 바꿀 수 없는 필드를 보낸 경우,
+     *         수정 결과 종료 시각이 시작 시각보다 뒤가 아닌 경우
+     */
+    @Transactional
+    public CampaignDetailResponse updateCampaign(Long userId, Long campaignId, CampaignUpdateRequest request) {
+        Campaign campaign = findMyCampaign(userId, campaignId);
+        LocalDateTime now = LocalDateTime.now(clock);
+
+        CampaignProgress progress = CampaignProgress.of(campaign.getTimeStart(), campaign.getTimeEnd(), now);
+        if (progress == CampaignProgress.ENDED) {
+            throw new BusinessException(ErrorCode.CAMPAIGN_ENDED);
+        }
+        if (progress == CampaignProgress.ONGOING && request.changesDelivery()) {
+            throw new BusinessException(ErrorCode.CAMPAIGN_FIELD_NOT_EDITABLE);
+        }
+
+        campaign.updateContent(request.title(), request.body(), request.imageUrl());
+        campaign.updateDelivery(request.linkUrl(), request.targetAgeGroup(), request.startAt(), request.endAt());
+        if (campaign.getTimeStart() != null && campaign.getTimeEnd() != null
+                && !campaign.getTimeEnd().isAfter(campaign.getTimeStart())) {
+            throw new BusinessException(ErrorCode.INVALID_CAMPAIGN_PERIOD);
+        }
+
+        // 응답의 updatedAt 에 이번 수정 시각이 담기도록 바로 반영한다.
+        campaignRepository.flush();
+        return toDetail(campaign, now);
+    }
+
+    /**
+     * 캠페인을 soft delete 한다. 노출·클릭 기록과 집계는 남고, 배너 매칭과 목록에서는 빠진다.
+     *
+     * @throws BusinessException 캠페인이 없거나 이미 삭제된 경우, 내 캠페인이 아닌 경우
+     */
+    @Transactional
+    public void deleteCampaign(Long userId, Long campaignId) {
+        Campaign campaign = findMyCampaign(userId, campaignId);
+        campaign.delete(LocalDateTime.now(clock));
+    }
+
+    private Campaign findMyCampaign(Long userId, Long campaignId) {
+        Campaign campaign = campaignRepository.findByCampaignIdAndDeletedAtIsNull(campaignId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CAMPAIGN_NOT_FOUND));
+        if (!campaign.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.CAMPAIGN_ACCESS_DENIED);
+        }
+        return campaign;
+    }
+
+    private CampaignDetailResponse toDetail(Campaign campaign, LocalDateTime now) {
+        return campaignStatsRepository.findById(campaign.getCampaignId())
+                .map(stats -> CampaignDetailResponse.of(campaign, stats.getSentCount(), stats.getClickCount(), now))
+                .orElseGet(() -> CampaignDetailResponse.of(campaign, 0, 0, now));
     }
 }

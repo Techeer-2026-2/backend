@@ -12,6 +12,8 @@ public interface CampaignRepository extends JpaRepository<Campaign, Long> {
 
     List<Campaign> findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(Long userId);
 
+    Optional<Campaign> findByCampaignIdAndDeletedAtIsNull(Long campaignId);
+
     /**
      * 연령대가 맞고 지금 진행 중인 캠페인 1개를 무작위로 고른다.
      *
