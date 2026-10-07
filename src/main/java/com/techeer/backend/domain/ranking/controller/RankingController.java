@@ -21,13 +21,13 @@ public class RankingController {
     @GetMapping("/nearby")
     @Operation(summary = "최근 완료된 시간 배치의 주변 차트 조회", description = "주변 → H3 r7 → 도시 → 전체 순서로 조회합니다.")
     public Data<ChartResponse> nearby(@RequestParam double lat, @RequestParam double lng,
-                                     @RequestParam(defaultValue = "20") int limit) {
+                                     @RequestParam(defaultValue = "50") int limit) {
         return new Data<>(service.nearby(lat, lng, limit));
     }
 
     @GetMapping("/global")
     @Operation(summary = "최근 완료된 시간 배치의 전체 차트 조회")
-    public Data<ChartResponse> global(@RequestParam(defaultValue = "20") int limit) {
+    public Data<ChartResponse> global(@RequestParam(defaultValue = "50") int limit) {
         return new Data<>(service.global(limit));
     }
 }

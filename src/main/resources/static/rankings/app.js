@@ -31,8 +31,8 @@ async function load() {
   try {
     const path =
       mode === "nearby"
-        ? `nearby?lat=${coordinates.lat}&lng=${coordinates.lng}&limit=20`
-        : "global?limit=20";
+        ? `nearby?lat=${coordinates.lat}&lng=${coordinates.lng}&limit=50`
+        : "global?limit=50";
     const result = await fetch(`/api/v1/rankings/tracks/${path}`);
     if (!result.ok)
       throw new Error(

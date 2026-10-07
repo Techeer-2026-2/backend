@@ -330,7 +330,7 @@ class RankingIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.items.length()").value(1))
                 .andExpect(jsonPath("$.data.items[0].uniqueListenerCount").value(20))
                 .andExpect(jsonPath("$.data.fallbackApplied").value(true));
-        mvc.perform(get("/api/v1/rankings/tracks/global?limit=21")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/rankings/tracks/global?limit=51")).andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/rankings/tracks/nearby?lat=NaN&lng=127")).andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/rankings/tracks/nearby?lat=37")).andExpect(status().isBadRequest());
     }

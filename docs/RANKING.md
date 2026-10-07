@@ -15,9 +15,9 @@ docker compose -f docker-compose.ranking-demo.yml up --build -d
 - 화면: <http://localhost:8081/rankings/>
 - API 문서: <http://localhost:8081/swagger-ui.html>
 - 전체 랭킹: <http://localhost:8081/api/v1/rankings/tracks/global>
-- 성수 주변: <http://localhost:8081/api/v1/rankings/tracks/nearby?lat=37.5442&lng=127.0561&limit=20>
+- 성수 주변: <http://localhost:8081/api/v1/rankings/tracks/nearby?lat=37.5442&lng=127.0561&limit=50>
 
-가상 곡 6개와 청취자 24명이 생성된다. 곡명·아티스트·청취 기록은 데모 데이터이며 음원 파일은 제공하지 않는다. 주변 차트는 성수 좌표에 20명, 전체 차트는 24명으로 시작한다. 같은 시간에 재시작해도 동일 이벤트가 중복 생성되지 않는다. 데모 모드는 시작할 때 직전 한 시간만 채운다. 이후 시간에 재생이 없으면 정상적으로 빈 차트가 생성된다. 새 데모가 필요하면 앱을 재시작한다.
+가상 곡 50개와 완주 세션 1,000건이 생성된다. GPS는 성수 800건, 강남 120건, 부산 80건으로 분산된다. 위치 갱신 API가 좌표를 수집하고 H3 resolution 8 셀로 변환해 저장하며, 이어지는 재생 시작이 해당 위치의 H3 셀을 고정한다. 곡명·아티스트·청취 기록은 데모 데이터이며 음원 파일은 제공하지 않는다. 같은 시간에 재시작해도 동일 이벤트가 중복 생성되지 않는다. 데모 모드는 시작할 때 직전 한 시간만 채운다. 이후 시간에 재생이 없으면 정상적으로 빈 차트가 생성된다. 새 데모가 필요하면 앱을 재시작한다.
 
 종료: `docker compose -f docker-compose.ranking-demo.yml down`. DB 볼륨은 남으므로 다시 실행할 수 있다.
 
@@ -41,8 +41,8 @@ docker compose up -d db
 | `POST /api/v1/locations` | 사용자 최신 위치 갱신, 오래된 위치 요청은 덮어쓰지 않음 |
 | `POST /api/v1/playback/sessions` | 재생 시작, 위치 스냅샷 고정 |
 | `POST /api/v1/playback/events` | 완주·스킵 종료 이벤트 |
-| `GET /api/v1/rankings/tracks/nearby?lat=...&lng=...&limit=20` | 저장된 주변 차트 및 fallback |
-| `GET /api/v1/rankings/tracks/global?limit=20` | 저장된 전체 차트 |
+| `GET /api/v1/rankings/tracks/nearby?lat=...&lng=...&limit=50` | 저장된 주변 차트 및 fallback |
+| `GET /api/v1/rankings/tracks/global?limit=50` | 저장된 전체 차트 |
 
 1. 곡 등록:
 
@@ -99,10 +99,10 @@ await session.finish(playedSeconds / durationSeconds);
 - H3 resolution 8, 현재 셀과 인접 1링을 사용한다. 이벤트가 없는 중심 셀도 주변 셀의 데이터를 조회할 수 있도록 미리 계산한다.
 - 사용자 집합을 합치므로 인접 셀에서 같은 곡을 들은 한 사람은 해당 조회 지역에 한 번만 반영된다.
 - 점수는 고유 완주 청취자 수. 동점이면 총 완주 수, 가장 최근 완주 시각, 마지막으로 곡 ID 오름차순이다. 서로 다른 세션의 반복 완주는 총 완주 수에는 포함된다.
-- 지역 청취자 20명, 곡별 3명 이상인 Top 20을 저장한다. 개인정보 보호를 위해 전체 차트에도 같은 최소 인원을 적용한다.
+- 지역 청취자 20명, 곡별 3명 이상인 Top 50을 저장한다. 개인정보 보호를 위해 전체 차트에도 같은 최소 인원을 적용한다.
 - fallback은 `NEARBY → PARENT(r7) → CITY → GLOBAL`. 해당 단계에 노출할 곡이 하나도 없으면 다음 단계로 진행한다.
 - 쿼리는 최신 **성공한 배치 한 시간**의 저장 결과만 읽는다. 지역마다 과거 시간으로 되돌아가거나 요청 중 점수를 계산하지 않는다.
-- 배치 실행 전은 `PENDING`, 노출 기준 미달은 `INSUFFICIENT_DATA`, 차트 존재는 `READY`. `limit`은 1~20, 좌표·쿼리 오류는 400이다.
+- 배치 실행 전은 `PENDING`, 노출 기준 미달은 `INSUFFICIENT_DATA`, 차트 존재는 `READY`. `limit`은 1~50, 좌표·쿼리 오류는 400이다.
 - PostgreSQL advisory lock으로 같은 시간의 동시 배치를 막는다. 모든 지역 결과를 단일 트랜잭션으로 교체하고 조회는 repeatable read를 사용한다. 재집계가 실패하면 이전 차트를 유지한다.
 
 원본 이벤트의 `event_id` PK와 `session_id` UNIQUE가 전송 중복을 막는다. 점수의 사용자 중복은 집계 시 집합으로 제거한다. 설계 문서의 사용자별 보조 테이블 세 개를 별도로 중복 저장하지 않고 원본 세션/이벤트로 다시 계산할 수 있게 했다.

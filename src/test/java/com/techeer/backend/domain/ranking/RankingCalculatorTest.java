@@ -59,13 +59,13 @@ class RankingCalculatorTest {
     }
 
     @Test
-    void storesTopTwentyOnlyAfterFiltering() {
+    void storesTopFiftyOnlyAfterFiltering() {
         List<Completion> events = new ArrayList<>();
-        for (int i = 0; i < 25; i++) {
+        for (int i = 0; i < 55; i++) {
             events.addAll(audience(20, "track-%02d".formatted(i), cell));
         }
-        assertThat(chart(calculator.calculate(events), "GLOBAL").scores()).hasSize(20);
-        assertThat(chart(calculator.calculate(events), "GLOBAL").scores().getLast().trackId()).isEqualTo("track-19");
+        assertThat(chart(calculator.calculate(events), "GLOBAL").scores()).hasSize(50);
+        assertThat(chart(calculator.calculate(events), "GLOBAL").scores().getLast().trackId()).isEqualTo("track-49");
     }
 
     @Test

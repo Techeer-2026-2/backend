@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
 public class RankingCalculator {
     public static final int MIN_REGION_LISTENERS = 20;
     public static final int MIN_TRACK_LISTENERS = 3;
-    public static final int MAX_ITEMS = 20;
+    public static final int MAX_ITEMS = 50;
     private final RankingGeo geo;
 
     public List<Chart> calculate(List<Completion> events) {
