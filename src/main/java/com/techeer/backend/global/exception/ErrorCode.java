@@ -23,7 +23,11 @@ public enum ErrorCode {
 
     // 노출
     IMPRESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 알림(notification_id)입니다."),
-    
+
+    // 회원 식별
+    MISSING_MEMBER_ID(HttpStatus.BAD_REQUEST, "X-Member-Id 헤더가 필요합니다."),
+    INVALID_MEMBER_ID(HttpStatus.BAD_REQUEST, "X-Member-Id 헤더 값이 올바르지 않습니다."),
+
     // 외부 API
     EXTERNAL_API_ERROR(HttpStatus.BAD_GATEWAY, "외부 API 호출에 실패했습니다.");
 
