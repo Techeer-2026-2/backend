@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"SP=/private/tmp/claude-501/-Users-gangminseo-Desktop----------/8805411f-9519-4939-9f04-527481d79a9c/scratchpad; for p in \\\"w24 feat/#24\\\" \\\"w25 feat/#25\\\" \\\"w20 feat/#20\\\" \\\"w32 feat/#32\\\"...",
+  "error": "Exit code 1\nfatal: 'fix-w24 feat/#24' is not a valid branch name\nfatal: 'fix-w25 feat/#25' is not a valid branch name\nfatal: 'fix-w20 feat/#20' is not a valid branch name\nfatal: 'fix-w32 feat/#32' is not a valid branch name\n/Users/gangminseo/Desktop/하반기테커프로젝트/backend                                            aaba29e [feat/#19]\n(eval):cd:1: no such file or directory: /private/tmp/claude-501/-Users-gangminseo-Desktop----------/8805411f-9519-4939-9f04-527481d79a9c/scratchpad/w24\ncat: sr...",
+  "timestamp": "2026-10-08T11:58:02.685Z",
+  "retry_count": 1
+}
