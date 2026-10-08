@@ -77,18 +77,19 @@ React + Vite + Zustand + Tailwind + TanStack Query
 ### 3-A. PostgreSQL (Phase 1 기준, 광고 시스템)
 
 ```sql
-CREATE TABLE users (  -- 광고주
+CREATE TABLE advertisers (  -- 광고주 (음악 앱 일반 유저의 users 와 구분하려고 advertisers 로 명명)
     user_id BIGINT PRIMARY KEY,
     email VARCHAR(128),
     password_hash VARCHAR(256),
     business_name VARCHAR(128),
     plan VARCHAR(16),
+    refresh_token_hash VARCHAR(64),  -- 로그인 때 발급한 refresh token 의 SHA-256 해시(원문 아님). 로그아웃하면 NULL, 광고주당 1개 세션
     created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
 );
 
 CREATE TABLE campaigns (  -- 캠페인 (위치 컬럼 삭제됨, 연령대 타겟으로 변경)
     campaign_id BIGINT PRIMARY KEY,
-    user_id BIGINT REFERENCES users(user_id),
+    user_id BIGINT REFERENCES advertisers(user_id),
     title VARCHAR(128),
     body TEXT,
     image_url VARCHAR(512),

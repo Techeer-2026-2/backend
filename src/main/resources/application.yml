@@ -55,6 +55,13 @@ springdoc:
     path: /v3/api-docs
   default-produces-media-type: application/json
 
+# ---------- 인증(JWT) ----------
+jwt:
+  # 서명 키(32바이트 이상). 기본값은 로컬·테스트 전용이며, 운영(prod)은 JWT_SECRET 환경변수가 없으면 기동하지 않는다.
+  secret: ${JWT_SECRET:local-dev-only-jwt-secret-change-me-0123456789}
+  access-token-minutes: 30
+  refresh-token-days: 14
+
 # ---------- 외부 API ----------
 external:
   itunes:

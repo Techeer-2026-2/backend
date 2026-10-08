@@ -5,6 +5,10 @@ spring:
       ddl-auto: validate
     show-sql: false
 
+# 운영 서명 키는 반드시 환경변수로 주입한다(기본값 없음 → 없으면 기동 실패).
+jwt:
+  secret: ${JWT_SECRET}
+
 springdoc:
   # 운영에서 Swagger UI 를 열어둘지는 팀 결정 사항.
   # 데모/심사 편의를 위해 P1~P2 는 열어두고, 필요해지면 false 로 바꾼다.
