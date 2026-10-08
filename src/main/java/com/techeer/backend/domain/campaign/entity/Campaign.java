@@ -71,4 +71,38 @@ public class Campaign extends BaseEntity {
         this.timeEnd = timeEnd;
         this.status = status;
     }
+
+    /**
+     * 문구와 배너 이미지를 바꾼다. null 인 값은 그대로 둔다.
+     */
+    public void updateContent(String title, String body, String imageUrl) {
+        if (title != null) {
+            this.title = title;
+        }
+        if (body != null) {
+            this.body = body;
+        }
+        if (imageUrl != null) {
+            this.imageUrl = imageUrl;
+        }
+    }
+
+    /**
+     * 도착 링크·타겟 연령대·노출 기간을 바꾼다. null 인 값은 그대로 두고, 빈 linkUrl 은 링크를 지운다.
+     */
+    public void updateDelivery(String linkUrl, String targetAgeGroup, LocalDateTime timeStart,
+            LocalDateTime timeEnd) {
+        if (linkUrl != null) {
+            this.linkUrl = linkUrl.isBlank() ? null : linkUrl;
+        }
+        if (targetAgeGroup != null) {
+            this.targetAgeGroup = targetAgeGroup;
+        }
+        if (timeStart != null) {
+            this.timeStart = timeStart;
+        }
+        if (timeEnd != null) {
+            this.timeEnd = timeEnd;
+        }
+    }
 }
