@@ -26,6 +26,10 @@ public class KakaoPlaceService {
                     .retrieve()
                     .body(KakaoLocalApiResponse.class);
 
+            if (response == null || response.documents() == null) {
+                throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR);
+            }
+
             return response.documents().stream()
                     .map(this::toPlaceSearchResponse)
                     .toList();
@@ -35,10 +39,15 @@ public class KakaoPlaceService {
     }
 
     private PlaceSearchResponse toPlaceSearchResponse(KakaoLocalApiResponse.Document doc) {
-        return new PlaceSearchResponse(
-                doc.placeName(),
-                doc.addressName(),
-                Double.parseDouble(doc.y()),
-                Double.parseDouble(doc.x()));
+        try {
+            return new PlaceSearchResponse(
+                    doc.placeName(),
+                    doc.addressName(),
+                    Double.parseDouble(doc.y()),
+                    Double.parseDouble(doc.x()));
+        } catch (NullPointerException | NumberFormatException e) {
+            // 좌표가 없거나 숫자가 아니면 외부 응답 오류로 본다.
+            throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR);
+        }
     }
 }

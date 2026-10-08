@@ -60,4 +60,40 @@ class KakaoPlaceServiceTest {
 
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
     }
+
+    @Test
+    void 응답_본문이_비어_있으면_EXTERNAL_API_ERROR_예외를_던진다() {
+        assertExternalError("{}");
+    }
+
+    @Test
+    void 좌표가_숫자가_아니면_EXTERNAL_API_ERROR_예외를_던진다() {
+        assertExternalError("""
+                { "documents": [ { "place_name": "강남역", "address_name": "서울", "x": "abc", "y": "37.49" } ] }
+                """);
+    }
+
+    @Test
+    void 좌표가_없으면_EXTERNAL_API_ERROR_예외를_던진다() {
+        assertExternalError("""
+                { "documents": [ { "place_name": "강남역", "address_name": "서울" } ] }
+                """);
+    }
+
+    private void assertExternalError(String responseBody) {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://dapi.kakao.com");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+
+        server.expect(requestToUriTemplate(
+                        "https://dapi.kakao.com/v2/local/search/keyword.json?query={query}", "강남역"))
+                .andRespond(withSuccess(responseBody, MediaType.APPLICATION_JSON));
+
+        KakaoPlaceService service = new KakaoPlaceService(builder.build());
+
+        BusinessException exception = catchThrowableOfType(
+                BusinessException.class,
+                () -> service.search("강남역"));
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
+    }
 }
