@@ -2,6 +2,12 @@ spring:
   application:
     name: commute-playlist-backend
 
+  flyway:
+    # 기존 광고 테이블(public)과 독립적으로 랭킹 스키마만 관리한다.
+    schemas: ranking
+    default-schema: ranking
+    locations: classpath:db/ranking
+
   profiles:
     default: local
 
