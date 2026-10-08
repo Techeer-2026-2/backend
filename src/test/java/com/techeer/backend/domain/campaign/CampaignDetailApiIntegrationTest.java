@@ -262,6 +262,13 @@ class CampaignDetailApiIntegrationTest {
                     .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
         }
 
+        // 전각 공백(U+3000)만 담긴 값도 공백으로 본다.
+        for (String field : List.of("title", "body", "imageUrl", "targetAgeGroup")) {
+            mockMvc.perform(patchRequest(campaign, USER_ID, "{\"" + field + "\": \"　\"}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+        }
+
         mockMvc.perform(patchRequest(campaign, USER_ID,
                         "{\"startAt\": \"" + daysFromNow(-3) + "\", \"endAt\": \"" + daysFromNow(-1) + "\"}"))
                 .andExpect(status().isBadRequest())

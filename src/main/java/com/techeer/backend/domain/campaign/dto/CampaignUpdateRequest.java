@@ -34,7 +34,8 @@ public record CampaignUpdateRequest(
         LocalDateTime endAt) {
 
     // null 은 "바꾸지 않음" 이라 @NotBlank 대신 값이 있을 때만 공백 여부를 검사한다. 본문은 줄바꿈을 포함할 수 있다.
-    private static final String NOT_BLANK = "(?s).*\\S.*";
+    // U 플래그: 전각 공백(U+3000) 등 유니코드 공백도 \S 가 아닌 공백으로 본다.
+    private static final String NOT_BLANK = "(?sU).*\\S.*";
     private static final String BLANK_MESSAGE = "공백일 수 없습니다";
 
     /**
