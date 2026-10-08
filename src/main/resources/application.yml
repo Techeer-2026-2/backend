@@ -68,6 +68,9 @@ external:
   kakao:
     base-url: https://dapi.kakao.com
     rest-api-key: ${KAKAO_REST_API_KEY:}
+  tmap:
+    base-url: https://apis.openapi.sk.com
+    app-key: ${TMAP_APP_KEY:}
 
 logging:
   level:
