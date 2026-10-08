@@ -2,12 +2,15 @@ package com.techeer.backend.domain.campaign.repository;
 
 import com.techeer.backend.domain.campaign.entity.Campaign;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface CampaignRepository extends JpaRepository<Campaign, Long> {
+
+    List<Campaign> findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(Long userId);
 
     /**
      * 연령대가 맞고 지금 진행 중인 캠페인 1개를 무작위로 고른다.
