@@ -57,6 +57,18 @@ class MemberIdArgumentResolverTest {
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.INVALID_MEMBER_ID);
     }
 
+    @Test
+    void 헤더가_빈_문자열이면_MISSING_MEMBER_ID_예외를_던진다() throws NoSuchMethodException {
+        NativeWebRequest request = mock(NativeWebRequest.class);
+        when(request.getHeader("X-Member-Id")).thenReturn("   ");
+
+        BusinessException exception = catchThrowableOfType(
+                BusinessException.class,
+                () -> resolver.resolveArgument(parameterOf("withMemberId", Long.class), null, request, null));
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MISSING_MEMBER_ID);
+    }
+
     private MethodParameter parameterOf(String methodName, Class<?> paramType) throws NoSuchMethodException {
         Method method = getClass().getDeclaredMethod(methodName, paramType);
         return new MethodParameter(method, 0);
