@@ -26,7 +26,11 @@ public enum ErrorCode {
 
     // 회원 식별
     MISSING_MEMBER_ID(HttpStatus.BAD_REQUEST, "X-Member-Id 헤더가 필요합니다."),
-    INVALID_MEMBER_ID(HttpStatus.BAD_REQUEST, "X-Member-Id 헤더 값이 올바르지 않습니다.");
+    INVALID_MEMBER_ID(HttpStatus.BAD_REQUEST, "X-Member-Id 헤더 값이 올바르지 않습니다."),
+
+    // 플레이리스트
+    PLAYLIST_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 플레이리스트입니다."),
+    PLAYLIST_TRACK_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 트랙입니다.");
 
     private final HttpStatus status;
     private final String message;
