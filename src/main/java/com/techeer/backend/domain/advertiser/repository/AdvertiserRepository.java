@@ -23,6 +23,8 @@ public interface AdvertiserRepository extends JpaRepository<Advertiser, Long> {
      */
     Optional<Advertiser> findByEmailAndDeletedAtIsNull(String email);
 
+    boolean existsByUserIdAndDeletedAtIsNull(Long userId);
+
     /**
      * 저장된 refresh token 해시가 oldHash 와 같을 때만 newHash 로 바꾼다. 바뀐 행 수(0 또는 1)를 돌려준다.
      *
