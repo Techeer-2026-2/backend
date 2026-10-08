@@ -83,4 +83,48 @@ class TmapDurationServiceTest {
 
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
     }
+
+    @Test
+    void 자동차_경로가_비어_있으면_EXTERNAL_API_ERROR_예외를_던진다() {
+        assertExternalError("/tmap/routes?version=1", TransportMode.CAR, """
+                { "features": [] }
+                """);
+    }
+
+    @Test
+    void 자동차_응답에_소요시간이_없으면_EXTERNAL_API_ERROR_예외를_던진다() {
+        assertExternalError("/tmap/routes?version=1", TransportMode.CAR, """
+                { "features": [ { "properties": {} } ] }
+                """);
+    }
+
+    @Test
+    void 대중교통_경로가_비어_있으면_EXTERNAL_API_ERROR_예외를_던진다() {
+        assertExternalError("/transit/routes", TransportMode.PUBLIC_TRANSIT, """
+                { "metaData": { "plan": { "itineraries": [] } } }
+                """);
+    }
+
+    @Test
+    void 대중교통_응답에_plan이_없으면_EXTERNAL_API_ERROR_예외를_던진다() {
+        assertExternalError("/transit/routes", TransportMode.PUBLIC_TRANSIT, """
+                { "metaData": {} }
+                """);
+    }
+
+    private void assertExternalError(String path, TransportMode mode, String responseBody) {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://apis.openapi.sk.com");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+
+        server.expect(requestTo("https://apis.openapi.sk.com" + path))
+                .andRespond(withSuccess(responseBody, MediaType.APPLICATION_JSON));
+
+        TmapDurationService service = new TmapDurationService(builder.build());
+
+        BusinessException exception = catchThrowableOfType(
+                BusinessException.class,
+                () -> service.getDurationMinutes(127.0, 37.5, 127.1, 37.6, mode));
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
+    }
 }

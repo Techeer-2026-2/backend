@@ -34,6 +34,14 @@ public class TmapDurationService {
                     .retrieve()
                     .body(TmapCarRouteResponse.class);
 
+            if (response == null
+                    || response.features() == null
+                    || response.features().isEmpty()
+                    || response.features().get(0) == null
+                    || response.features().get(0).properties() == null
+                    || response.features().get(0).properties().totalTime() == null) {
+                throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR);
+            }
             return response.features().get(0).properties().totalTime();
         } catch (RestClientException e) {
             throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR);
@@ -48,6 +56,15 @@ public class TmapDurationService {
                     .retrieve()
                     .body(TmapTransitRouteResponse.class);
 
+            if (response == null
+                    || response.metaData() == null
+                    || response.metaData().plan() == null
+                    || response.metaData().plan().itineraries() == null
+                    || response.metaData().plan().itineraries().isEmpty()
+                    || response.metaData().plan().itineraries().get(0) == null
+                    || response.metaData().plan().itineraries().get(0).totalTime() == null) {
+                throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR);
+            }
             return response.metaData().plan().itineraries().get(0).totalTime();
         } catch (RestClientException e) {
             throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR);
