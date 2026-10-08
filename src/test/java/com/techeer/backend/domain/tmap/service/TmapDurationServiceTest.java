@@ -82,6 +82,7 @@ class TmapDurationServiceTest {
                 () -> service.getDurationMinutes(127.0, 37.5, 127.1, 37.6, TransportMode.CAR));
 
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
+        assertThat(exception.getCause()).isNotNull();
     }
 
     @Test

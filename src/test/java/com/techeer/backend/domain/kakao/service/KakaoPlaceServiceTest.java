@@ -3,6 +3,7 @@ package com.techeer.backend.domain.kakao.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestToUriTemplate;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -95,5 +96,37 @@ class KakaoPlaceServiceTest {
                 () -> service.search("강남역"));
 
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.EXTERNAL_API_ERROR);
+    }
+
+    @Test
+    void 플러스가_들어간_검색어는_퍼센트_인코딩해서_보낸다() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://dapi.kakao.com");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+
+        server.expect(requestTo("https://dapi.kakao.com/v2/local/search/keyword.json?query=C%2B%2B"))
+                .andRespond(withSuccess("{ \"documents\": [] }", MediaType.APPLICATION_JSON));
+
+        KakaoPlaceService service = new KakaoPlaceService(builder.build());
+
+        assertThat(service.search("C++")).isEmpty();
+        server.verify();
+    }
+
+    @Test
+    void 카카오_호출_실패의_원인_예외를_보존한다() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://dapi.kakao.com");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+
+        server.expect(requestToUriTemplate(
+                        "https://dapi.kakao.com/v2/local/search/keyword.json?query={query}", "강남역"))
+                .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
+
+        KakaoPlaceService service = new KakaoPlaceService(builder.build());
+
+        BusinessException exception = catchThrowableOfType(
+                BusinessException.class,
+                () -> service.search("강남역"));
+
+        assertThat(exception.getCause()).isNotNull();
     }
 }

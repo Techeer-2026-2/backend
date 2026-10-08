@@ -114,7 +114,9 @@ public class CampaignService {
      */
     @Transactional
     public void deleteCampaign(Long userId, Long campaignId) {
-        Campaign campaign = findMyCampaign(userId, campaignId);
+        // 수정(updateCampaign)과 같은 잠금을 걸어, 동시에 들어온 수정 내용을 삭제가 덮어쓰지 못하게 한다.
+        Campaign campaign = checkOwner(userId,
+                campaignRepository.findWithLockByCampaignIdAndDeletedAtIsNull(campaignId));
         campaign.delete(LocalDateTime.now(clock));
     }
 
