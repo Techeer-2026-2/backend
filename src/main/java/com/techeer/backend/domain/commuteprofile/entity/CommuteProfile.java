@@ -47,16 +47,16 @@ public class CommuteProfile extends BaseEntity {
 
     @Embedded
     @AttributeOverrides({
-        @AttributeOverride(name = "latitude", column = @Column(name = "departure_latitude")),
-        @AttributeOverride(name = "longitude", column = @Column(name = "departure_longitude")),
+        @AttributeOverride(name = "latitude", column = @Column(name = "departure_latitude", nullable = false)),
+        @AttributeOverride(name = "longitude", column = @Column(name = "departure_longitude", nullable = false)),
         @AttributeOverride(name = "placeName", column = @Column(name = "departure_place_name"))
     })
     private Location departure;
 
     @Embedded
     @AttributeOverrides({
-        @AttributeOverride(name = "latitude", column = @Column(name = "arrival_latitude")),
-        @AttributeOverride(name = "longitude", column = @Column(name = "arrival_longitude")),
+        @AttributeOverride(name = "latitude", column = @Column(name = "arrival_latitude", nullable = false)),
+        @AttributeOverride(name = "longitude", column = @Column(name = "arrival_longitude", nullable = false)),
         @AttributeOverride(name = "placeName", column = @Column(name = "arrival_place_name"))
     })
     private Location arrival;

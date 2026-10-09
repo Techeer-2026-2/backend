@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.techeer.backend.domain.commuteprofile.dto.CommuteProfileCreateRequest;
 import com.techeer.backend.domain.commuteprofile.dto.CommuteProfileResponse;
+import com.techeer.backend.domain.commuteprofile.dto.CommuteProfileUpdateRequest;
 import com.techeer.backend.domain.commuteprofile.dto.LocationDto;
 import com.techeer.backend.domain.commuteprofile.entity.CommuteProfile;
 import com.techeer.backend.domain.commuteprofile.entity.CommuteType;
@@ -21,13 +22,16 @@ import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 class CommuteProfileServiceTest {
 
     private final CommuteProfileRepository commuteProfileRepository = mock(CommuteProfileRepository.class);
     private final TmapDurationService tmapDurationService = mock(TmapDurationService.class);
+    private final TransactionTemplate transactionTemplate = fakeTransactionTemplate();
     private final CommuteProfileService commuteProfileService =
-            new CommuteProfileService(commuteProfileRepository, tmapDurationService);
+            new CommuteProfileService(commuteProfileRepository, tmapDurationService, transactionTemplate);
 
     @Test
     void 등록하면_TMAP으로_평균_소요시간을_자동_계산한다() {
@@ -45,6 +49,25 @@ class CommuteProfileServiceTest {
         CommuteProfileResponse response = commuteProfileService.create(1L, request);
 
         assertThat(response.averageDurationMinutes()).isEqualTo(25);
+    }
+
+    @Test
+    void 수정하면_새로운_소요시간으로_갱신된다() {
+        CommuteProfile profile = sampleProfile(1L);
+        when(commuteProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+        when(tmapDurationService.getDurationMinutes(anyDouble(), anyDouble(), anyDouble(), anyDouble(), any()))
+                .thenReturn(40);
+
+        CommuteProfileUpdateRequest request = new CommuteProfileUpdateRequest(
+                CommuteType.FROM_WORK,
+                TransportMode.PUBLIC_TRANSIT,
+                "9호선",
+                new LocationDto(37.5, 127.0, "회사"),
+                new LocationDto(37.6, 127.1, "집"));
+
+        CommuteProfileResponse response = commuteProfileService.update(1L, 1L, request);
+
+        assertThat(response.averageDurationMinutes()).isEqualTo(40);
     }
 
     @Test
@@ -90,5 +113,18 @@ class CommuteProfileServiceTest {
                 .departure(new Location(37.5, 127.0, "집"))
                 .arrival(new Location(37.6, 127.1, "회사"))
                 .build();
+    }
+
+    /**
+     * 테스트에선 진짜 DB 트랜잭션이 없으니, TransactionTemplate.execute()가 콜백을 그냥
+     * 바로 실행하도록 흉내만 낸다.
+     */
+    private TransactionTemplate fakeTransactionTemplate() {
+        TransactionTemplate template = mock(TransactionTemplate.class);
+        when(template.execute(any())).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        });
+        return template;
     }
 }

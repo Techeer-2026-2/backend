@@ -7,6 +7,7 @@ import com.techeer.backend.domain.commuteprofile.service.CommuteProfileService;
 import com.techeer.backend.global.resolver.MemberId;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -31,7 +32,8 @@ public class CommuteProfileController {
     @Operation(summary = "통근 프로필 등록")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping
-    public CommuteProfileResponse create(@MemberId Long memberId, @RequestBody CommuteProfileCreateRequest request) {
+    public CommuteProfileResponse create(
+            @MemberId Long memberId, @Valid @RequestBody CommuteProfileCreateRequest request) {
         return commuteProfileService.create(memberId, request);
     }
 
@@ -52,7 +54,7 @@ public class CommuteProfileController {
     public CommuteProfileResponse update(
             @MemberId Long memberId,
             @PathVariable Long profileId,
-            @RequestBody CommuteProfileUpdateRequest request) {
+            @Valid @RequestBody CommuteProfileUpdateRequest request) {
         return commuteProfileService.update(memberId, profileId, request);
     }
 

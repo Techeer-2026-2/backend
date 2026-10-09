@@ -15,14 +15,15 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class CommuteProfileService {
 
     private final CommuteProfileRepository commuteProfileRepository;
     private final TmapDurationService tmapDurationService;
+    private final TransactionTemplate transactionTemplate;
 
     @Transactional
     public CommuteProfileResponse create(Long memberId, CommuteProfileCreateRequest request) {
@@ -43,32 +44,39 @@ public class CommuteProfileService {
         return CommuteProfileResponse.from(commuteProfileRepository.save(profile));
     }
 
+    @Transactional(readOnly = true)
     public List<CommuteProfileResponse> findAll(Long memberId) {
         return commuteProfileRepository.findAllByMemberId(memberId).stream()
                 .map(CommuteProfileResponse::from)
                 .toList();
     }
 
+    @Transactional(readOnly = true)
     public CommuteProfileResponse findDetail(Long memberId, Long profileId) {
         return CommuteProfileResponse.from(findOwnedOrThrow(memberId, profileId));
     }
 
-    @Transactional
+    /**
+     * TMAP 호출(느릴 수 있음)을 DB 트랜잭션 밖에서 먼저 끝내고, 실제 쓰기(소유권 재확인 + 저장)만
+     * 짧은 트랜잭션으로 묶는다. 읽기 → 외부 호출 → 쓰기를 한 트랜잭션에 묶으면 외부 API가 느려질 때
+     * DB 커넥션을 불필요하게 오래 붙잡게 된다.
+     */
     public CommuteProfileResponse update(Long memberId, Long profileId, CommuteProfileUpdateRequest request) {
-        CommuteProfile profile = findOwnedOrThrow(memberId, profileId);
         Location departure = toLocation(request.departure());
         Location arrival = toLocation(request.arrival());
         int averageDurationMinutes = calculateDuration(departure, arrival, request.transportMode());
 
-        profile.update(
-                request.commuteType(),
-                request.transportMode(),
-                request.frequentRouteName(),
-                averageDurationMinutes,
-                departure,
-                arrival);
-
-        return CommuteProfileResponse.from(profile);
+        return transactionTemplate.execute(status -> {
+            CommuteProfile profile = findOwnedOrThrow(memberId, profileId);
+            profile.update(
+                    request.commuteType(),
+                    request.transportMode(),
+                    request.frequentRouteName(),
+                    averageDurationMinutes,
+                    departure,
+                    arrival);
+            return CommuteProfileResponse.from(profile);
+        });
     }
 
     @Transactional
