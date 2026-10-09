@@ -1,4 +1,6 @@
 package com.techeer.backend.domain.playlist.dto;
 
-public record PlaylistCreateRequest(String name) {
+import jakarta.validation.constraints.NotBlank;
+
+public record PlaylistCreateRequest(@NotBlank String name) {
 }

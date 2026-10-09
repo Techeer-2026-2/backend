@@ -8,6 +8,7 @@ import com.techeer.backend.domain.playlist.service.PlaylistService;
 import com.techeer.backend.global.resolver.MemberId;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -31,7 +32,7 @@ public class PlaylistController {
     @Operation(summary = "플레이리스트 생성")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping
-    public PlaylistResponse create(@MemberId Long memberId, @RequestBody PlaylistCreateRequest request) {
+    public PlaylistResponse create(@MemberId Long memberId, @Valid @RequestBody PlaylistCreateRequest request) {
         return playlistService.create(memberId, request);
     }
 
@@ -60,7 +61,7 @@ public class PlaylistController {
     public void addTracks(
             @MemberId Long memberId,
             @PathVariable Long playlistId,
-            @RequestBody List<PlaylistTrackAddRequest> requests) {
+            @Valid @RequestBody List<PlaylistTrackAddRequest> requests) {
         playlistService.addTracks(memberId, playlistId, requests);
     }
 
