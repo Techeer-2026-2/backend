@@ -60,8 +60,9 @@ jwt:
 external:
   itunes:
     # 인증 불필요. CORS 미지원이라 프론트가 아닌 백엔드에서 호출한다.
+    # country=KR 파라미터는 쓰지 않는다 — entity=song/album과 같이 쓰면 검색 결과가 0건으로 나오는
+    # 버그가 있다 (예: country=KR&entity=song&term=IU → 0건, country 없이 호출하면 정상).
     base-url: https://itunes.apple.com
-    country: KR
   openweather:
     base-url: https://api.openweathermap.org/data/2.5
     api-key: ${OPENWEATHER_API_KEY:}
