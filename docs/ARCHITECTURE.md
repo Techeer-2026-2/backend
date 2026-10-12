@@ -35,7 +35,7 @@
 ├── NGINX (리버스 프록시)
 ├── Spring Boot (API 서버 — 계정/캠페인/배너/클릭 전부 하나의 애플리케이션, 모놀리식+역할분리, MSA 아님)
 ├── PostgreSQL (P1~)
-├── Redis (현재 용도 보류 — 위치 삭제 + 알림 보류로 실질 사용처 없음)
+├── Redis (현재 용도 보류 — 알림 보류로 실질 사용처 없음)
 ├── Kafka (P3, click-events 토픽만)
 └── Prometheus + Grafana (P3, 모니터링)
 
@@ -133,9 +133,17 @@ CREATE TABLE campaign_stats (  -- Phase 1 한정, Phase 3부터 ClickHouse로 �
     click_count BIGINT,
     created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
 );
+
+CREATE TABLE gps_log (  -- 실시간 랭킹(주변 인기곡) 기능용. 음악 재생 시 GPS 좌표 원본 수집
+    gps_log_id BIGINT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION,
+    recorded_at TIMESTAMP
+);
 ```
 
-**삭제된 테이블**: `user_locations` (GPS/위치 개념 폐기로 통째로 삭제)
+**GPS 재도입**: `user_locations` 테이블은 삭제됐지만, 이후 실시간 랭킹(주변 인기곡) 기능에서 `gps_log` 테이블로 GPS 수집이 다시 도입됐다. 음악 재생 시점에 원본 좌표를 `gps_log`에 그대로 기록하고, "근처" 판별을 위한 셀 단위 집계는 `popular_track_ranking.geo_cell` 컬럼에서 처리한다.
 
 ### 3-B. ClickHouse (Phase 3, 별도 다이어그램/DB)
 
