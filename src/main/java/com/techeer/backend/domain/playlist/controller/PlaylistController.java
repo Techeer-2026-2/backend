@@ -9,6 +9,7 @@ import com.techeer.backend.global.resolver.MemberId;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -61,7 +62,7 @@ public class PlaylistController {
     public void addTracks(
             @MemberId Long memberId,
             @PathVariable Long playlistId,
-            @Valid @RequestBody List<PlaylistTrackAddRequest> requests) {
+            @RequestBody @NotNull List<@Valid PlaylistTrackAddRequest> requests) {
         playlistService.addTracks(memberId, playlistId, requests);
     }
 
