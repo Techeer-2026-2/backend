@@ -40,7 +40,10 @@ public enum ErrorCode {
     PLAYLIST_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 플레이리스트입니다."),
     PLAYLIST_TRACK_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 트랙입니다."),
     // 외부 API
-    EXTERNAL_API_ERROR(HttpStatus.BAD_GATEWAY, "외부 API 호출에 실패했습니다.");
+    EXTERNAL_API_ERROR(HttpStatus.BAD_GATEWAY, "외부 API 호출에 실패했습니다."),
+
+    // 통근 프로필
+    COMMUTE_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 통근 프로필입니다.");
 
     private final HttpStatus status;
     private final String message;
