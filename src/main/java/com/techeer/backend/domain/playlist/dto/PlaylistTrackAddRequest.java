@@ -10,5 +10,6 @@ public record PlaylistTrackAddRequest(
         String collectionName,
         String artworkUrl,
         String previewUrl,
-        Integer trackTimeMillis) {
+        Integer trackTimeMillis,
+        String genre) {
 }
