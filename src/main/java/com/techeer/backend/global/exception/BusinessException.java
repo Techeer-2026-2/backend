@@ -19,4 +19,15 @@ public class BusinessException extends RuntimeException {
         super(errorCode.getMessage());
         this.errorCode = errorCode;
     }
+
+    /**
+     * 원인 예외를 예외 체인에 남기는 생성자. 응답에는 원인을 싣지 않고 서버 로그에서만 확인한다.
+     *
+     * @param errorCode 응답 상태와 기본 메시지를 정의한 오류 코드
+     * @param cause 원래 발생한 예외
+     */
+    public BusinessException(ErrorCode errorCode, Throwable cause) {
+        super(errorCode.getMessage(), cause);
+        this.errorCode = errorCode;
+    }
 }

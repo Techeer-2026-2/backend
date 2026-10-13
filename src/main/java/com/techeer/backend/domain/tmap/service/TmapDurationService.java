@@ -8,10 +8,12 @@ import com.techeer.backend.domain.tmap.dto.TmapTransitRouteResponse;
 import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TmapDurationService {
@@ -44,7 +46,8 @@ public class TmapDurationService {
             }
             return response.features().get(0).properties().totalTime();
         } catch (RestClientException e) {
-            throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR);
+            log.warn("TMAP 호출 실패", e);
+            throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR, e);
         }
     }
 
@@ -67,7 +70,8 @@ public class TmapDurationService {
             }
             return response.metaData().plan().itineraries().get(0).totalTime();
         } catch (RestClientException e) {
-            throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR);
+            log.warn("TMAP 호출 실패", e);
+            throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR, e);
         }
     }
 }
