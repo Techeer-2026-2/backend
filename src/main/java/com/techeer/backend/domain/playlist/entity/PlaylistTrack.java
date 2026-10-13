@@ -28,30 +28,13 @@ public class PlaylistTrack extends BaseEntity {
     @JoinColumn(name = "playlist_id", nullable = false)
     private Playlist playlist;
 
-    private Long itunesTrackId;
-
-    private String trackName;
-
-    private String artistName;
-
-    private String collectionName;
-
-    private String artworkUrl;
-
-    private String previewUrl;
-
-    private Integer trackTimeMillis;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "track_id", nullable = false)
+    private Track track;
 
     @Builder
-    private PlaylistTrack(Playlist playlist, Long itunesTrackId, String trackName, String artistName,
-            String collectionName, String artworkUrl, String previewUrl, Integer trackTimeMillis) {
+    private PlaylistTrack(Playlist playlist, Track track) {
         this.playlist = playlist;
-        this.itunesTrackId = itunesTrackId;
-        this.trackName = trackName;
-        this.artistName = artistName;
-        this.collectionName = collectionName;
-        this.artworkUrl = artworkUrl;
-        this.previewUrl = previewUrl;
-        this.trackTimeMillis = trackTimeMillis;
+        this.track = track;
     }
 }
