@@ -5,8 +5,10 @@ import com.techeer.backend.domain.commuteprofile.dto.CommuteProfileResponse;
 import com.techeer.backend.domain.commuteprofile.dto.CommuteProfileUpdateRequest;
 import com.techeer.backend.domain.commuteprofile.dto.LocationDto;
 import com.techeer.backend.domain.commuteprofile.entity.CommuteProfile;
+import com.techeer.backend.domain.commuteprofile.entity.CommuteRoute;
 import com.techeer.backend.domain.commuteprofile.entity.Location;
 import com.techeer.backend.domain.commuteprofile.repository.CommuteProfileRepository;
+import com.techeer.backend.domain.commuteprofile.repository.CommuteRouteRepository;
 import com.techeer.backend.domain.tmap.TransportMode;
 import com.techeer.backend.domain.tmap.service.TmapDurationService;
 import com.techeer.backend.global.exception.BusinessException;
@@ -22,6 +24,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class CommuteProfileService {
 
     private final CommuteProfileRepository commuteProfileRepository;
+    private final CommuteRouteRepository commuteRouteRepository;
     private final TmapDurationService tmapDurationService;
     private final TransactionTemplate transactionTemplate;
 
@@ -34,26 +37,33 @@ public class CommuteProfileService {
         CommuteProfile profile = CommuteProfile.builder()
                 .memberId(memberId)
                 .commuteType(request.commuteType())
-                .transportMode(request.transportMode())
                 .frequentRouteName(request.frequentRouteName())
-                .averageDurationMinutes(averageDurationMinutes)
                 .departure(departure)
                 .arrival(arrival)
                 .build();
+        commuteProfileRepository.save(profile);
 
-        return CommuteProfileResponse.from(commuteProfileRepository.save(profile));
+        CommuteRoute route = CommuteRoute.builder()
+                .commuteProfile(profile)
+                .transportMode(request.transportMode())
+                .averageDurationMinutes(averageDurationMinutes)
+                .build();
+        commuteRouteRepository.save(route);
+
+        return CommuteProfileResponse.from(profile, route);
     }
 
     @Transactional(readOnly = true)
     public List<CommuteProfileResponse> findAll(Long memberId) {
         return commuteProfileRepository.findAllByMemberId(memberId).stream()
-                .map(CommuteProfileResponse::from)
+                .map(profile -> CommuteProfileResponse.from(profile, findRouteOrThrow(profile.getId())))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public CommuteProfileResponse findDetail(Long memberId, Long profileId) {
-        return CommuteProfileResponse.from(findOwnedOrThrow(memberId, profileId));
+        CommuteProfile profile = findOwnedOrThrow(memberId, profileId);
+        return CommuteProfileResponse.from(profile, findRouteOrThrow(profile.getId()));
     }
 
     /**
@@ -68,20 +78,21 @@ public class CommuteProfileService {
 
         return transactionTemplate.execute(status -> {
             CommuteProfile profile = findOwnedOrThrow(memberId, profileId);
-            profile.update(
-                    request.commuteType(),
-                    request.transportMode(),
-                    request.frequentRouteName(),
-                    averageDurationMinutes,
-                    departure,
-                    arrival);
-            return CommuteProfileResponse.from(profile);
+            profile.update(request.commuteType(), request.frequentRouteName(), departure, arrival);
+
+            CommuteRoute route = findRouteOrThrow(profile.getId());
+            route.update(request.transportMode(), averageDurationMinutes, route.getRouteDetail());
+
+            return CommuteProfileResponse.from(profile, route);
         });
     }
 
     @Transactional
     public void delete(Long memberId, Long profileId) {
-        commuteProfileRepository.delete(findOwnedOrThrow(memberId, profileId));
+        CommuteProfile profile = findOwnedOrThrow(memberId, profileId);
+        commuteRouteRepository.findByCommuteProfileId(profile.getId())
+                .ifPresent(commuteRouteRepository::delete);
+        commuteProfileRepository.delete(profile);
     }
 
     private int calculateDuration(Location departure, Location arrival, TransportMode transportMode) {
@@ -102,5 +113,10 @@ public class CommuteProfileService {
             throw new BusinessException(ErrorCode.COMMUTE_PROFILE_NOT_FOUND);
         }
         return profile;
+    }
+
+    private CommuteRoute findRouteOrThrow(Long profileId) {
+        return commuteRouteRepository.findByCommuteProfileId(profileId)
+                .orElseThrow(() -> new IllegalStateException("CommuteProfile에 연결된 CommuteRoute가 없습니다: " + profileId));
     }
 }
