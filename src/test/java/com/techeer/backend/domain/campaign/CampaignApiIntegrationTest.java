@@ -90,7 +90,7 @@ class CampaignApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("종료 시각이 시작 시각보다 뒤가 아니면 400 을 돌려준다")
+    @DisplayName("종료 시각이 시작 시각보다 뒤가 아니거나 이미 지났으면 400 을 돌려준다")
     void rejectsInvalidPeriod() throws Exception {
         LocalDateTime startAt = daysFromNow(3);
 
@@ -102,7 +102,19 @@ class CampaignApiIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_CAMPAIGN_PERIOD"));
 
+        mockMvc.perform(createRequest(USER_ID, campaignJson(daysFromNow(-3), daysFromNow(-1), "null")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CAMPAIGN_PERIOD_ALREADY_ENDED"));
+
         assertThat(campaignRepository.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("시작 시각이 과거면 등록 즉시 진행중이 된다")
+    void startsImmediatelyWhenStartIsInPast() throws Exception {
+        mockMvc.perform(createRequest(USER_ID, campaignJson(daysFromNow(-1), daysFromNow(3), "null")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("ONGOING"));
     }
 
     @Test

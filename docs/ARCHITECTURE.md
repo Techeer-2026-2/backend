@@ -35,7 +35,7 @@
 ├── NGINX (리버스 프록시)
 ├── Spring Boot (API 서버 — 계정/캠페인/배너/클릭 전부 하나의 애플리케이션, 모놀리식+역할분리, MSA 아님)
 ├── PostgreSQL (P1~)
-├── Redis (현재 용도 보류 — 위치 삭제 + 알림 보류로 실질 사용처 없음)
+├── Redis (현재 용도 보류 — 알림 보류로 실질 사용처 없음)
 ├── Kafka (P3, click-events 토픽만)
 └── Prometheus + Grafana (P3, 모니터링)
 
@@ -55,7 +55,7 @@ React + Vite + Zustand + Tailwind + TanStack Query
 
 | 용도 | API | 상태/주의사항 |
 |---|---|---|
-| 음악 검색/재생 | **iTunes Search API** (Deezer에서 전환 중) | 인증 불필요, `country=KR` 파라미터 지원, CORS 미지원(백엔드 프록시 필수), 30초 미리듣기만 제공(프로모션 목적 ToS 유의) |
+| 음악 검색/재생 | **iTunes Search API** (Deezer에서 전환 중) | 인증 불필요, CORS 미지원(백엔드 프록시 필수), 30초 미리듣기만 제공(프로모션 목적 ToS 유의). `country=KR`은 `entity=song`/`album`과 같이 쓰면 결과가 0건이 되는 버그가 있어 쓰지 않는다(#47) |
 | 날씨 | **OpenWeatherMap** | 무료 티어(분당 60회/월 100만 회)로 충분 |
 | 지도/장소 검색 | **카카오맵 API** (JS SDK + 로컬 API) | 무료 할당량 충분(일 10만 건). **주의: 검색 결과를 DB에 대량 캐싱/재사용하는 것은 카카오 정책상 금지.** 유저가 선택한 좌표 1개를 프로필에 저장하는 정도는 문제 없음 |
 | ~~음악 재생(초기안)~~ | ~~Spotify~~ | **제외됨** — 2026년 2월 정책 변경(개발자 Premium 필수 + 테스트 유저 5명 제한)으로 데모 불가능 |
@@ -133,9 +133,17 @@ CREATE TABLE campaign_stats (  -- Phase 1 한정, Phase 3부터 ClickHouse로 �
     click_count BIGINT,
     created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
 );
+
+CREATE TABLE gps_log (  -- 실시간 랭킹(주변 인기곡) 기능용. 음악 재생 시 GPS 좌표 원본 수집
+    gps_log_id BIGINT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION,
+    recorded_at TIMESTAMP
+);
 ```
 
-**삭제된 테이블**: `user_locations` (GPS/위치 개념 폐기로 통째로 삭제)
+**GPS 재도입**: `user_locations` 테이블은 삭제됐지만, 이후 실시간 랭킹(주변 인기곡) 기능에서 `gps_log` 테이블로 GPS 수집이 다시 도입됐다. 음악 재생 시점에 원본 좌표를 `gps_log`에 그대로 기록하고, "근처" 판별을 위한 셀 단위 집계는 `popular_track_ranking.geo_cell` 컬럼에서 처리한다.
 
 ### 3-B. ClickHouse (Phase 3, 별도 다이어그램/DB)
 

@@ -26,4 +26,11 @@ public abstract class BaseEntity {
     private LocalDateTime updatedAt;
 
     private LocalDateTime deletedAt;
+
+    /**
+     * 행을 지우지 않고 삭제 시각만 남긴다 (soft delete).
+     */
+    public void delete(LocalDateTime now) {
+        this.deletedAt = now;
+    }
 }

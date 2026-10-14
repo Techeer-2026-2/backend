@@ -1,12 +1,15 @@
 package com.techeer.backend.global.exception;
 
 import java.util.stream.Collectors;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
@@ -21,7 +24,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException e) {
         ErrorCode errorCode = e.getErrorCode();
-        return ResponseEntity.status(errorCode.getStatus()).body(ErrorResponse.of(errorCode));
+        return json(errorCode.getStatus(), ErrorResponse.of(errorCode));
     }
 
     /**
@@ -59,8 +62,23 @@ public class GlobalExceptionHandler {
         return invalidInput(e.getName() + ": 형식이 올바르지 않습니다.");
     }
 
+    /**
+     * 컨트롤러 파라미터(@RequestParam 등)에 직접 붙인 검증 어노테이션이 실패하면 400 으로 변환한다.
+     */
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ErrorResponse> handleMethodValidation(HandlerMethodValidationException e) {
+        return invalidInput("요청 값이 올바르지 않습니다.");
+    }
+
     private ResponseEntity<ErrorResponse> invalidInput(String message) {
-        return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
-                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, message));
+        return json(ErrorCode.INVALID_INPUT.getStatus(), ErrorResponse.of(ErrorCode.INVALID_INPUT, message));
+    }
+
+    /**
+     * 에러 본문은 항상 JSON 으로 응답한다. Content-Type 을 명시하지 않으면 EventSource 처럼 Accept 가
+     * text/event-stream 인 요청에서는 JSON 본문을 만들 수 없어 에러 응답 자체가 실패한다.
+     */
+    private ResponseEntity<ErrorResponse> json(HttpStatus status, ErrorResponse body) {
+        return ResponseEntity.status(status).contentType(MediaType.APPLICATION_JSON).body(body);
     }
 }

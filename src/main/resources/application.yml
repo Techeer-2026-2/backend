@@ -62,18 +62,28 @@ jwt:
   access-token-minutes: 30
   refresh-token-days: 14
 
+# ---------- CORS ----------
+cors:
+  # 브라우저에서 API 를 호출해도 되는 프론트 주소(쉼표로 구분). 기본값은 로컬 Vite 개발 서버.
+  # 배포 시에는 CORS_ALLOWED_ORIGINS 환경변수로 실제 프론트 주소를 지정한다. '*' 는 쓰지 않는다.
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+
 # ---------- 외부 API ----------
 external:
   itunes:
     # 인증 불필요. CORS 미지원이라 프론트가 아닌 백엔드에서 호출한다.
+    # country=KR 파라미터는 쓰지 않는다 — entity=song/album과 같이 쓰면 검색 결과가 0건으로 나오는
+    # 버그가 있다 (예: country=KR&entity=song&term=IU → 0건, country 없이 호출하면 정상).
     base-url: https://itunes.apple.com
-    country: KR
   openweather:
     base-url: https://api.openweathermap.org/data/2.5
     api-key: ${OPENWEATHER_API_KEY:}
   kakao:
     base-url: https://dapi.kakao.com
     rest-api-key: ${KAKAO_REST_API_KEY:}
+  tmap:
+    base-url: https://apis.openapi.sk.com
+    app-key: ${TMAP_APP_KEY:}
 
 logging:
   level:
