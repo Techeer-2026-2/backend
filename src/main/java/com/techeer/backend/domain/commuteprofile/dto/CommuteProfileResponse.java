@@ -1,6 +1,7 @@
 package com.techeer.backend.domain.commuteprofile.dto;
 
 import com.techeer.backend.domain.commuteprofile.entity.CommuteProfile;
+import com.techeer.backend.domain.commuteprofile.entity.CommuteRoute;
 import com.techeer.backend.domain.commuteprofile.entity.CommuteType;
 import com.techeer.backend.domain.commuteprofile.entity.Location;
 import com.techeer.backend.domain.tmap.TransportMode;
@@ -14,13 +15,13 @@ public record CommuteProfileResponse(
         LocationDto departure,
         LocationDto arrival) {
 
-    public static CommuteProfileResponse from(CommuteProfile profile) {
+    public static CommuteProfileResponse from(CommuteProfile profile, CommuteRoute route) {
         return new CommuteProfileResponse(
                 profile.getId(),
                 profile.getCommuteType(),
-                profile.getTransportMode(),
+                route.getTransportMode(),
                 profile.getFrequentRouteName(),
-                profile.getAverageDurationMinutes(),
+                route.getAverageDurationMinutes(),
                 toDto(profile.getDeparture()),
                 toDto(profile.getArrival()));
     }

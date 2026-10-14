@@ -1,6 +1,5 @@
 package com.techeer.backend.domain.commuteprofile.entity;
 
-import com.techeer.backend.domain.tmap.TransportMode;
 import com.techeer.backend.global.entity.BaseEntity;
 import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.AttributeOverrides;
@@ -35,15 +34,8 @@ public class CommuteProfile extends BaseEntity {
     @Column(nullable = false, length = 16)
     private CommuteType commuteType;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private TransportMode transportMode;
-
     @Column(nullable = false, length = 100)
     private String frequentRouteName;
-
-    @Column(nullable = false)
-    private Integer averageDurationMinutes;
 
     @Embedded
     @AttributeOverrides({
@@ -62,23 +54,18 @@ public class CommuteProfile extends BaseEntity {
     private Location arrival;
 
     @Builder
-    private CommuteProfile(Long memberId, CommuteType commuteType, TransportMode transportMode,
-            String frequentRouteName, Integer averageDurationMinutes, Location departure, Location arrival) {
+    private CommuteProfile(Long memberId, CommuteType commuteType, String frequentRouteName,
+            Location departure, Location arrival) {
         this.memberId = memberId;
         this.commuteType = commuteType;
-        this.transportMode = transportMode;
         this.frequentRouteName = frequentRouteName;
-        this.averageDurationMinutes = averageDurationMinutes;
         this.departure = departure;
         this.arrival = arrival;
     }
 
-    public void update(CommuteType commuteType, TransportMode transportMode, String frequentRouteName,
-            Integer averageDurationMinutes, Location departure, Location arrival) {
+    public void update(CommuteType commuteType, String frequentRouteName, Location departure, Location arrival) {
         this.commuteType = commuteType;
-        this.transportMode = transportMode;
         this.frequentRouteName = frequentRouteName;
-        this.averageDurationMinutes = averageDurationMinutes;
         this.departure = departure;
         this.arrival = arrival;
     }
