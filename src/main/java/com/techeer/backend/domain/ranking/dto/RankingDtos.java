@@ -26,12 +26,11 @@ public final class RankingDtos {
             @NotNull Instant recordedAt) {
     }
 
-    public record LocationRequest(@NotNull @Positive Long userId, @NotNull @Valid LocationInput location) {
+    public record LocationRequest(@NotNull @Valid LocationInput location) {
     }
 
     public record StartRequest(
             @NotNull UUID sessionId,
-            @NotNull @Positive Long userId,
             @NotBlank @Size(max = 128) String trackId,
             @NotNull Instant startedAt,
             @Valid LocationInput location) {

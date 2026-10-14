@@ -37,15 +37,16 @@ public class PlaybackService {
     private final ObjectMapper mapper;
 
     @Transactional
-    public void updateLocation(LocationRequest request) {
+    public void updateLocation(long memberId, LocationRequest request) {
         validateLocation(request.location(), clock.instant());
-        repository.saveLocation(request.userId(), request.location(), geo.cell(request.location().lat(), request.location().lng()));
+        repository.saveLocation(memberId, request.location(), geo.cell(request.location().lat(), request.location().lng()));
     }
 
     @Transactional
-    public SessionResult start(StartRequest request) {
+    public SessionResult start(long memberId, StartRequest request) {
         require(!request.startedAt().isAfter(clock.instant()));
-        String hash = hash(request);
+        // 회원 번호까지 포함해 해시하므로, 다른 회원이 같은 sessionId 를 쓰면 409(PLAYBACK_CONFLICT)가 된다.
+        String hash = hash(memberId, request);
         var existing = repository.session(request.sessionId());
         if (existing.isPresent()) {
             sameRequest(existing.get().requestHash(), hash);
@@ -53,7 +54,7 @@ public class PlaybackService {
         }
         track(request.trackId());
         LocationInput location = request.location() != null ? request.location()
-                : repository.location(request.userId(), request.startedAt()).orElse(null);
+                : repository.location(memberId, request.startedAt()).orElse(null);
         String status = "MISSING";
         String cell = null;
         City city = null;
@@ -69,7 +70,7 @@ public class PlaybackService {
                 city = repository.city(cell).orElse(null);
             }
         }
-        Session session = new Session(request.sessionId(), request.userId(), request.trackId(), request.startedAt(),
+        Session session = new Session(request.sessionId(), memberId, request.trackId(), request.startedAt(),
                 cell, city == null ? null : city.id(), city == null ? null : city.label(), status, hash);
         boolean created = repository.insertSession(session);
         Session saved = repository.session(request.sessionId()).orElseThrow();
@@ -78,11 +79,15 @@ public class PlaybackService {
     }
 
     @Transactional
-    public EventResult record(EventRequest request) {
+    public EventResult record(long memberId, EventRequest request) {
         require(Double.isFinite(request.playedRatio()) && request.playedRatio() >= 0 && request.playedRatio() <= 1);
         require(!request.occurredAt().isAfter(clock.instant()));
         Session session = repository.session(request.sessionId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.PLAYBACK_SESSION_NOT_FOUND));
+        // 남의 세션에는 이벤트를 쓸 수 없다. 세션이 있다는 사실도 알리지 않으려고 404 로 응답한다.
+        if (session.userId() != memberId) {
+            throw new BusinessException(ErrorCode.PLAYBACK_SESSION_NOT_FOUND);
+        }
         require(!request.occurredAt().isBefore(session.startedAt()));
         String hash = hash(request);
         boolean created = repository.insertEvent(request, hash, clock.instant());
@@ -124,9 +129,9 @@ public class PlaybackService {
         }
     }
 
-    private String hash(Object request) {
+    private String hash(Object... parts) {
         try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(mapper.writeValueAsBytes(request)));
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(mapper.writeValueAsBytes(parts)));
         } catch (JsonProcessingException | NoSuchAlgorithmException exception) {
             throw new IllegalStateException("재생 요청의 멱등성 키를 만들 수 없습니다", exception);
         }

@@ -70,9 +70,9 @@ public class RankingDemoData implements ApplicationRunner {
             LocationInput location = new LocationInput(point.lat(), point.lng(), 5.0 + event % 15,
                     startedAt.minusSeconds(event % 10));
             long userId = 10_000_000L + event;
-            playback.updateLocation(new LocationRequest(userId, location));
-            playback.start(new StartRequest(sessionId, userId, trackId(track), startedAt, null));
-            playback.record(new EventRequest(id("event:" + key), sessionId, EventType.TRACK_COMPLETED,
+            playback.updateLocation(userId, new LocationRequest(location));
+            playback.start(userId, new StartRequest(sessionId, trackId(track), startedAt, null));
+            playback.record(userId, new EventRequest(id("event:" + key), sessionId, EventType.TRACK_COMPLETED,
                     1.0, startedAt.plusSeconds(120)));
         }
         batch.rebuild(hour);
