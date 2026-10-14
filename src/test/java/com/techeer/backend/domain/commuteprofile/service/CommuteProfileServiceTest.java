@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -73,6 +74,39 @@ class CommuteProfileServiceTest {
         CommuteProfileResponse response = commuteProfileService.update(1L, 1L, request);
 
         assertThat(response.averageDurationMinutes()).isEqualTo(40);
+    }
+
+    @Test
+    void 노선이름만_수정하면_재계산하지_않고_기존_소요시간을_유지한다() {
+        CommuteProfile profile = sampleProfile(1L);
+        CommuteRoute route = sampleRoute(profile);
+        when(commuteProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+        when(commuteRouteRepository.findByCommuteProfileId(any())).thenReturn(Optional.of(route));
+
+        CommuteProfileUpdateRequest request = new CommuteProfileUpdateRequest(null, null, "9호선", null, null);
+
+        CommuteProfileResponse response = commuteProfileService.update(1L, 1L, request);
+
+        assertThat(response.frequentRouteName()).isEqualTo("9호선");
+        assertThat(response.averageDurationMinutes()).isEqualTo(30);
+        verify(tmapDurationService, never()).getDurationMinutes(anyDouble(), anyDouble(), anyDouble(), anyDouble(), any());
+    }
+
+    @Test
+    void 교통수단만_수정하면_재계산한다() {
+        CommuteProfile profile = sampleProfile(1L);
+        CommuteRoute route = sampleRoute(profile);
+        when(commuteProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+        when(commuteRouteRepository.findByCommuteProfileId(any())).thenReturn(Optional.of(route));
+        when(tmapDurationService.getDurationMinutes(anyDouble(), anyDouble(), anyDouble(), anyDouble(), any()))
+                .thenReturn(50);
+
+        CommuteProfileUpdateRequest request =
+                new CommuteProfileUpdateRequest(null, TransportMode.CAR, null, null, null);
+
+        CommuteProfileResponse response = commuteProfileService.update(1L, 1L, request);
+
+        assertThat(response.averageDurationMinutes()).isEqualTo(50);
     }
 
     @Test
