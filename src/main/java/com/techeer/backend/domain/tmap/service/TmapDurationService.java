@@ -3,6 +3,8 @@ package com.techeer.backend.domain.tmap.service;
 import com.techeer.backend.domain.tmap.TransportMode;
 import com.techeer.backend.domain.tmap.dto.TmapCarRouteRequest;
 import com.techeer.backend.domain.tmap.dto.TmapCarRouteResponse;
+import com.techeer.backend.domain.tmap.dto.TmapPedestrianRouteRequest;
+import com.techeer.backend.domain.tmap.dto.TmapPedestrianRouteResponse;
 import com.techeer.backend.domain.tmap.dto.TmapTransitRouteRequest;
 import com.techeer.backend.domain.tmap.dto.TmapTransitRouteResponse;
 import com.techeer.backend.global.exception.BusinessException;
@@ -23,7 +25,8 @@ public class TmapDurationService {
     public int getDurationMinutes(double startX, double startY, double endX, double endY, TransportMode mode) {
         int totalSeconds = switch (mode) {
             case CAR -> fetchCarDurationSeconds(startX, startY, endX, endY);
-            case PUBLIC_TRANSIT -> fetchTransitDurationSeconds(startX, startY, endX, endY);
+            case SUBWAY, BUS -> fetchTransitDurationSeconds(startX, startY, endX, endY);
+            case WALK -> fetchPedestrianDurationSeconds(startX, startY, endX, endY);
         };
         return totalSeconds / 60;
     }
@@ -69,6 +72,29 @@ public class TmapDurationService {
                 throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR);
             }
             return response.metaData().plan().itineraries().get(0).totalTime();
+        } catch (RestClientException e) {
+            log.warn("TMAP 호출 실패", e);
+            throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR, e);
+        }
+    }
+
+    private int fetchPedestrianDurationSeconds(double startX, double startY, double endX, double endY) {
+        try {
+            TmapPedestrianRouteResponse response = tmapRestClient.post()
+                    .uri("/tmap/routes/pedestrian?version=1")
+                    .body(TmapPedestrianRouteRequest.of(startX, startY, endX, endY))
+                    .retrieve()
+                    .body(TmapPedestrianRouteResponse.class);
+
+            if (response == null || response.features() == null) {
+                throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR);
+            }
+
+            return response.features().stream()
+                    .filter(feature -> feature.properties() != null && feature.properties().totalTime() != null)
+                    .findFirst()
+                    .map(feature -> feature.properties().totalTime())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.EXTERNAL_API_ERROR));
         } catch (RestClientException e) {
             log.warn("TMAP 호출 실패", e);
             throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR, e);

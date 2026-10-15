@@ -42,7 +42,7 @@ class TmapDurationServiceTest {
     }
 
     @Test
-    void 대중교통_소요시간을_분으로_변환한다() {
+    void 지하철_소요시간을_분으로_변환한다() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://apis.openapi.sk.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
 
@@ -62,9 +62,65 @@ class TmapDurationServiceTest {
 
         TmapDurationService service = new TmapDurationService(builder.build());
 
-        int minutes = service.getDurationMinutes(127.0, 37.5, 127.1, 37.6, TransportMode.PUBLIC_TRANSIT);
+        int minutes = service.getDurationMinutes(127.0, 37.5, 127.1, 37.6, TransportMode.SUBWAY);
 
         assertThat(minutes).isEqualTo(15);
+    }
+
+    @Test
+    void 버스도_같은_대중교통_API를_재사용한다() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://apis.openapi.sk.com");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+
+        server.expect(requestTo("https://apis.openapi.sk.com/transit/routes"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("""
+                        {
+                          "metaData": {
+                            "plan": {
+                              "itineraries": [
+                                { "totalTime": 600 }
+                              ]
+                            }
+                          }
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        TmapDurationService service = new TmapDurationService(builder.build());
+
+        int minutes = service.getDurationMinutes(127.0, 37.5, 127.1, 37.6, TransportMode.BUS);
+
+        assertThat(minutes).isEqualTo(10);
+    }
+
+    @Test
+    void 도보_소요시간을_분으로_변환한다() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://apis.openapi.sk.com");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+
+        server.expect(requestTo("https://apis.openapi.sk.com/tmap/routes/pedestrian?version=1"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("""
+                        {
+                          "features": [
+                            { "properties": { "totalTime": 780, "pointType": "SP" } },
+                            { "properties": {} }
+                          ]
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        TmapDurationService service = new TmapDurationService(builder.build());
+
+        int minutes = service.getDurationMinutes(127.0, 37.5, 127.1, 37.6, TransportMode.WALK);
+
+        assertThat(minutes).isEqualTo(13);
+    }
+
+    @Test
+    void 도보_응답에_totalTime이_없으면_EXTERNAL_API_ERROR_예외를_던진다() {
+        assertExternalError("/tmap/routes/pedestrian?version=1", TransportMode.WALK, """
+                { "features": [ { "properties": {} } ] }
+                """);
     }
 
     @Test
@@ -101,14 +157,14 @@ class TmapDurationServiceTest {
 
     @Test
     void 대중교통_경로가_비어_있으면_EXTERNAL_API_ERROR_예외를_던진다() {
-        assertExternalError("/transit/routes", TransportMode.PUBLIC_TRANSIT, """
+        assertExternalError("/transit/routes", TransportMode.SUBWAY, """
                 { "metaData": { "plan": { "itineraries": [] } } }
                 """);
     }
 
     @Test
     void 대중교통_응답에_plan이_없으면_EXTERNAL_API_ERROR_예외를_던진다() {
-        assertExternalError("/transit/routes", TransportMode.PUBLIC_TRANSIT, """
+        assertExternalError("/transit/routes", TransportMode.SUBWAY, """
                 { "metaData": {} }
                 """);
     }
