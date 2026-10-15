@@ -145,7 +145,113 @@ CREATE TABLE gps_log (  -- 실시간 랭킹(주변 인기곡) 기능용. 음악 
 
 **GPS 재도입**: `user_locations` 테이블은 삭제됐지만, 이후 실시간 랭킹(주변 인기곡) 기능에서 `gps_log` 테이블로 GPS 수집이 다시 도입됐다. 음악 재생 시점에 원본 좌표를 `gps_log`에 그대로 기록하고, "근처" 판별을 위한 셀 단위 집계는 `popular_track_ranking.geo_cell` 컬럼에서 처리한다.
 
-### 3-B. ClickHouse (Phase 3, 별도 다이어그램/DB)
+### 3-B. PostgreSQL (음악 앱 도메인)
+
+```sql
+CREATE TABLE users (  -- 음악 앱 일반 유저 (광고주 계정인 advertisers 와 별개)
+    user_id BIGINT PRIMARY KEY,
+    email VARCHAR(255),
+    password_hash VARCHAR(255),
+    nickname VARCHAR(50),
+    created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
+);
+
+CREATE TABLE commute_profile (  -- 통근 프로필(출발/도착지, 통근 구분). 한 유저가 여러 개 등록 가능
+    commute_profile_id BIGINT PRIMARY KEY,
+    user_id BIGINT REFERENCES users(user_id),
+    origin_name VARCHAR(255),
+    origin_lat DOUBLE PRECISION,
+    origin_lng DOUBLE PRECISION,
+    destination_name VARCHAR(255),
+    destination_lat DOUBLE PRECISION,
+    destination_lng DOUBLE PRECISION,
+    commute_type VARCHAR(20),  -- 출근/퇴근/기타
+    created_at TIMESTAMP
+);
+
+CREATE TABLE commute_route (  -- 프로필 1개에 교통수단별 경로가 여러 개 달릴 수 있음(1:N)
+    route_id BIGINT PRIMARY KEY,
+    commute_profile_id BIGINT REFERENCES commute_profile(commute_profile_id),
+    transport_type VARCHAR(20),  -- 대중교통/도보/자차. TMAP이 지하철/버스를 구분 계산해주지 않아 대중교통으로 통합(#85)
+    avg_duration_min INT,  -- TMAP 기반 자동계산
+    route_detail JSON,  -- 지도API 원본 응답 캐싱용 (컬럼만 존재, 아직 미구현)
+    created_at TIMESTAMP
+);
+
+CREATE TABLE playlist (  -- 사용자 직접 생성(USER_CREATED) 또는 서버 추천 생성(COMMUTE_GENERATED)
+    playlist_id BIGINT PRIMARY KEY,
+    user_id BIGINT REFERENCES users(user_id),
+    title VARCHAR(100),
+    description VARCHAR(500),
+    is_public BOOLEAN DEFAULT TRUE,
+    total_duration_sec INT,
+    created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
+);
+
+CREATE TABLE track (  -- 곡 자체 정보. 여러 플레이리스트에서 재사용되는 공용 테이블
+    track_id BIGINT PRIMARY KEY,
+    itunes_track_id VARCHAR(100) UNIQUE,
+    title VARCHAR(200),
+    artist VARCHAR(200),
+    genre VARCHAR(50),  -- 날씨/시간대 기반 추천에 사용
+    collection_name VARCHAR(200),
+    artwork_url VARCHAR(500),
+    preview_url VARCHAR(500),
+    track_time_millis INT,
+    created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
+);
+
+CREATE TABLE playlist_track (  -- 플레이리스트-곡 연결 테이블(N:M)
+    playlist_track_id BIGINT PRIMARY KEY,
+    playlist_id BIGINT REFERENCES playlist(playlist_id),
+    track_id BIGINT REFERENCES track(track_id),
+    created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
+);
+
+CREATE TABLE track_like (  -- 곡 좋아요 (Phase 3)
+    track_id BIGINT REFERENCES track(track_id),
+    user_id BIGINT REFERENCES users(user_id),
+    created_at TIMESTAMP
+);
+
+CREATE TABLE follow (  -- 사용자 팔로우 (Phase 3)
+    follower_id BIGINT REFERENCES users(user_id),
+    followee_id BIGINT REFERENCES users(user_id),
+    created_at TIMESTAMP
+);
+
+CREATE TABLE now_playing (  -- 현재 재생 중인 곡 (공유/조회 기능용)
+    user_id BIGINT PRIMARY KEY REFERENCES users(user_id),
+    playlist_id BIGINT REFERENCES playlist(playlist_id),
+    track_id BIGINT REFERENCES track(track_id),
+    is_public BOOLEAN DEFAULT TRUE,
+    updated_at TIMESTAMP
+);
+
+CREATE TABLE playback_event (  -- 재생 이벤트(PLAY/SKIP/REPEAT). 주변 인기곡 집계(popular_track_ranking)의 원본
+    playback_event_id BIGINT PRIMARY KEY,
+    user_id BIGINT REFERENCES users(user_id),
+    track_id BIGINT REFERENCES track(track_id),
+    action_type VARCHAR(20),  -- PLAY/SKIP/REPEAT
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+    played_at TIMESTAMP
+);
+
+CREATE TABLE popular_track_ranking (  -- 주변 인기곡 집계 결과. geo_cell 단위로 play_count 롤업
+    rank_no SMALLINT,
+    ranking_id BIGINT,
+    track_id BIGINT REFERENCES track(track_id),
+    geo_cell VARCHAR(20),  -- 위치 집계 단위
+    play_count INT,
+    aggregated_at TIMESTAMP,
+    PRIMARY KEY (rank_no, ranking_id)
+);
+```
+
+**빠진 테이블**: `recommendation`은 ERD에서 SQL 자체가 깨져서 export됐고(FK 선언이 COMMENT 문자열 안에 섞여 들어감) 실제 사용 여부도 불확실해 제외.
+
+### 3-C. ClickHouse (Phase 3, 별도 다이어그램/DB)
 
 ```sql
 CREATE TABLE click_events_kafka (  -- 통로 역할, 저장 안 됨
@@ -171,7 +277,7 @@ FROM click_events_kafka
 GROUP BY campaign_id, minute;
 ```
 
-### 3-C. S3 (테이블 아님, 파일 저장 규칙)
+### 3-D. S3 (테이블 아님, 파일 저장 규칙)
 
 ```
 버킷: raw-click-data
