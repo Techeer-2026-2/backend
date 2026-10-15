@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.techeer.backend.TestcontainersConfiguration;
 import java.util.ArrayList;
@@ -27,6 +28,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 /**
  * /api/v1/auth/* 를 실제 PostgreSQL(Testcontainers)에 붙여 검증한다.
@@ -41,6 +43,8 @@ class UserAuthApiIntegrationTest {
 
     private static final String SIGNUP = "/api/v1/auth/signup";
     private static final String LOGIN = "/api/v1/auth/login";
+    private static final String REFRESH = "/api/v1/auth/refresh";
+    private static final String LOGOUT = "/api/v1/auth/logout";
     private static final String EMAIL = "listener@techeer.com";
     private static final String PASSWORD = "password1234";
 
@@ -57,6 +61,7 @@ class UserAuthApiIntegrationTest {
     @AfterEach
     void clean() {
         jdbcTemplate.update("delete from users");
+        jdbcTemplate.update("delete from advertisers");
     }
 
     @Test
@@ -154,9 +159,102 @@ class UserAuthApiIntegrationTest {
                 .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
     }
 
+    @Test
+    @DisplayName("refresh 하면 새 토큰을 받고, 쓴 refresh token 은 다시 쓸 수 없다")
+    void refreshRotatesToken() throws Exception {
+        String first = signupAndLogin().get("refreshToken").asText();
+
+        JsonNode second = body(mockMvc.perform(refresh(first)).andExpect(status().isOk()).andReturn());
+        assertThat(second.get("refreshToken").asText()).isNotEqualTo(first);
+
+        mockMvc.perform(refresh(first))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_TOKEN"));
+        mockMvc.perform(refresh(second.get("refreshToken").asText())).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("다른 곳에서 다시 로그인하면 이전 refresh token 은 쓸 수 없다 (회원당 세션 1개)")
+    void newLoginInvalidatesPreviousRefreshToken() throws Exception {
+        String old = signupAndLogin().get("refreshToken").asText();
+        mockMvc.perform(json(LOGIN, Map.of("email", EMAIL, "password", PASSWORD))).andExpect(status().isOk());
+
+        mockMvc.perform(refresh(old)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("같은 refresh token 으로 동시에 여러 번 요청해도 한 번만 성공한다")
+    void concurrentRefreshSucceedsOnlyOnce() throws Exception {
+        String token = signupAndLogin().get("refreshToken").asText();
+        int threads = 8;
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        try {
+            List<Future<Integer>> results = new ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                results.add(executor.submit(() -> {
+                    start.await();
+                    return mockMvc.perform(refresh(token)).andReturn().getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+            int ok = 0;
+            for (Future<Integer> result : results) {
+                if (result.get(30, TimeUnit.SECONDS) == 200) {
+                    ok++;
+                }
+            }
+            assertThat(ok).isEqualTo(1);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    @DisplayName("로그아웃하면 그 refresh token 으로 갱신할 수 없고, 다시 로그아웃해도 204")
+    void logoutRevokesRefreshToken() throws Exception {
+        String token = signupAndLogin().get("refreshToken").asText();
+
+        mockMvc.perform(json(LOGOUT, Map.of("refreshToken", token))).andExpect(status().isNoContent());
+        mockMvc.perform(refresh(token)).andExpect(status().isUnauthorized());
+        mockMvc.perform(json(LOGOUT, Map.of("refreshToken", token))).andExpect(status().isNoContent());
+        mockMvc.perform(json(LOGOUT, Map.of("refreshToken", "garbage"))).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("광고주 토큰으로는 회원 refresh/logout 을 못 하고, 회원 토큰으로는 광고주 refresh 를 못 한다")
+    void advertiserAndUserTokensAreNotInterchangeable() throws Exception {
+        mockMvc.perform(json("/api/v1/owners/signup",
+                Map.of("email", "owner@techeer.com", "password", PASSWORD, "businessName", "카페")))
+                .andExpect(status().isCreated());
+        String advertiserRefresh = body(mockMvc.perform(json("/api/v1/owners/login",
+                Map.of("email", "owner@techeer.com", "password", PASSWORD))).andReturn()).get("refreshToken").asText();
+        String userRefresh = signupAndLogin().get("refreshToken").asText();
+
+        mockMvc.perform(refresh(advertiserRefresh))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_TOKEN"));
+        mockMvc.perform(json(LOGOUT, Map.of("refreshToken", advertiserRefresh)))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(json("/api/v1/owners/refresh", Map.of("refreshToken", userRefresh)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_TOKEN"));
+    }
+
+    private JsonNode signupAndLogin() throws Exception {
+        mockMvc.perform(signup(EMAIL, PASSWORD, "출근러")).andExpect(status().isCreated());
+        return body(mockMvc.perform(json(LOGIN, Map.of("email", EMAIL, "password", PASSWORD)))
+                .andExpect(status().isOk()).andReturn());
+    }
+
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder signup(
             String email, String password, String nickname) throws Exception {
         return json(SIGNUP, Map.of("email", email, "password", password, "nickname", nickname));
+    }
+
+    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder refresh(String token)
+            throws Exception {
+        return json(REFRESH, Map.of("refreshToken", token));
     }
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder json(
@@ -164,4 +262,7 @@ class UserAuthApiIntegrationTest {
         return post(url).contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(payload));
     }
 
+    private JsonNode body(MvcResult result) throws Exception {
+        return objectMapper.readTree(result.getResponse().getContentAsByteArray());
+    }
 }
