@@ -40,6 +40,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class UserAuthApiIntegrationTest {
 
     private static final String SIGNUP = "/api/v1/auth/signup";
+    private static final String LOGIN = "/api/v1/auth/login";
     private static final String EMAIL = "listener@techeer.com";
     private static final String PASSWORD = "password1234";
 
@@ -125,6 +126,32 @@ class UserAuthApiIntegrationTest {
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    @DisplayName("로그인하면 access/refresh token 을 받는다")
+    void loginIssuesTokens() throws Exception {
+        mockMvc.perform(signup(EMAIL, PASSWORD, "출근러")).andExpect(status().isCreated());
+
+        mockMvc.perform(json(LOGIN, Map.of("email", "LISTENER@techeer.com", "password", PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.expiresIn").value(1800));
+    }
+
+    @Test
+    @DisplayName("없는 이메일과 틀린 비밀번호는 같은 401 INVALID_CREDENTIALS")
+    void wrongCredentialsAreIndistinguishable() throws Exception {
+        mockMvc.perform(signup(EMAIL, PASSWORD, "출근러")).andExpect(status().isCreated());
+
+        mockMvc.perform(json(LOGIN, Map.of("email", EMAIL, "password", "wrong-password")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+        mockMvc.perform(json(LOGIN, Map.of("email", "nobody@techeer.com", "password", PASSWORD)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
     }
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder signup(
