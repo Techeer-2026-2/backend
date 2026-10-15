@@ -71,3 +71,12 @@ external:
 logging:
   level:
     com.techeer.backend: ${LOG_LEVEL:INFO}
+
+auth:
+  jwt:
+    # 운영에서는 AUTH_JWT_SECRET_BASE64 (32바이트 이상을 Base64 인코딩) 필수.
+    # 로컬/테스트에서 생략하면 기동마다 임시 키가 생성된다.
+    secret-base64: ${AUTH_JWT_SECRET_BASE64:}
+    ttl-seconds: 3600
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
