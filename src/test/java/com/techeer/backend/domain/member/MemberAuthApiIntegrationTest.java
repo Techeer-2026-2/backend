@@ -91,6 +91,8 @@ class MemberAuthApiIntegrationTest {
         mockMvc.perform(signup(EMAIL, "short", "닉")).andExpect(status().isBadRequest());
         mockMvc.perform(signup(EMAIL, PASSWORD, " ")).andExpect(status().isBadRequest());
         mockMvc.perform(signup(EMAIL, "가".repeat(25), "닉")).andExpect(status().isBadRequest());
+        // 이모지는 UTF-16 으로는 2단위지만 한 글자다: 4개는 4글자라 거절, 8개는 8글자(32바이트)라 통과
+        mockMvc.perform(signup(EMAIL, "😀".repeat(4), "닉")).andExpect(status().isBadRequest());
         mockMvc.perform(signup(EMAIL, "가".repeat(24), "닉")).andExpect(status().isCreated());
     }
 
