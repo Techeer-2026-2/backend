@@ -76,12 +76,24 @@ git config --local commit.template .gitmessage.txt
 ### push 전 체크
 
 ```bash
-./gradlew build          # 빌드 + 테스트 통과 확인
 git switch develop && git pull
 git switch feat/#12 && git merge develop   # 충돌은 로컬에서 해결
+./gradlew build          # develop 을 합친 "결과" 로 빌드 + 테스트 통과 확인
 ```
 
 웹 에디터에서 충돌을 해결하면 히스토리가 지저분해지므로 로컬에서 처리합니다.
+
+**빌드는 반드시 develop 을 합친 뒤에 합니다.** git 이 충돌이라고 알려 주지 않아도 같은 이름의 상수·클래스가 두 곳에서 생기면 컴파일이 깨집니다. 합치기 전에 빌드하면 이 문제를 놓칩니다.
+
+### ErrorCode 규칙
+
+`global/exception/ErrorCode.java` 는 모든 도메인이 함께 쓰는 파일이라 충돌이 잦습니다. 아래를 지킵니다.
+
+- **이름**: 새 상수는 도메인 접두사로 시작합니다 (`PLAYLIST_NOT_FOUND`, `CAMPAIGN_ENDED`). 이미 있는 상수의 이름은 바꾸지 않습니다.
+- **위치**: 자기 도메인 구역(`// 캠페인` 같은 주석 아래)의 **맨 위**에 추가합니다. 파일 끝에 추가하지 않습니다. 구역이 없으면 기존 구역 사이에 새로 만듭니다.
+- **모양**: 모든 상수 끝에 쉼표(`,`)를 붙입니다. 마지막 `;` 는 별도 줄에 있으므로 마지막 상수를 고칠 필요가 없습니다.
+- **PR 전**: develop 을 합친 뒤 컴파일해서 같은 이름이 없는지 확인합니다.
+- 도메인별 enum 으로 나누는 방법은 변경 범위가 커서 지금은 하지 않습니다.
 
 ---
 
