@@ -5,6 +5,7 @@ import com.techeer.backend.domain.kakao.service.KakaoPlaceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,9 +21,9 @@ public class KakaoPlaceController {
 
     private final KakaoPlaceService kakaoPlaceService;
 
-    @Operation(summary = "장소 검색", description = "키워드로 카카오 장소를 검색한다.")
+    @Operation(summary = "장소 검색", description = "키워드(최대 50자)로 카카오 장소를 검색한다.")
     @GetMapping("/places/search")
-    public List<PlaceSearchResponse> search(@RequestParam @NotBlank String keyword) {
+    public List<PlaceSearchResponse> search(@RequestParam @NotBlank @Size(max = 50) String keyword) {
         return kakaoPlaceService.search(keyword);
     }
 }
