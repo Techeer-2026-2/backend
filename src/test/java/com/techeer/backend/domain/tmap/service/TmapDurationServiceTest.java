@@ -42,7 +42,7 @@ class TmapDurationServiceTest {
     }
 
     @Test
-    void 지하철_소요시간을_분으로_변환한다() {
+    void 대중교통_소요시간을_분으로_변환한다() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://apis.openapi.sk.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
 
@@ -62,35 +62,9 @@ class TmapDurationServiceTest {
 
         TmapDurationService service = new TmapDurationService(builder.build());
 
-        int minutes = service.getDurationMinutes(127.0, 37.5, 127.1, 37.6, TransportMode.SUBWAY);
+        int minutes = service.getDurationMinutes(127.0, 37.5, 127.1, 37.6, TransportMode.PUBLIC_TRANSIT);
 
         assertThat(minutes).isEqualTo(15);
-    }
-
-    @Test
-    void 버스도_같은_대중교통_API를_재사용한다() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("https://apis.openapi.sk.com");
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-
-        server.expect(requestTo("https://apis.openapi.sk.com/transit/routes"))
-                .andExpect(method(HttpMethod.POST))
-                .andRespond(withSuccess("""
-                        {
-                          "metaData": {
-                            "plan": {
-                              "itineraries": [
-                                { "totalTime": 600 }
-                              ]
-                            }
-                          }
-                        }
-                        """, MediaType.APPLICATION_JSON));
-
-        TmapDurationService service = new TmapDurationService(builder.build());
-
-        int minutes = service.getDurationMinutes(127.0, 37.5, 127.1, 37.6, TransportMode.BUS);
-
-        assertThat(minutes).isEqualTo(10);
     }
 
     @Test
@@ -157,14 +131,14 @@ class TmapDurationServiceTest {
 
     @Test
     void 대중교통_경로가_비어_있으면_EXTERNAL_API_ERROR_예외를_던진다() {
-        assertExternalError("/transit/routes", TransportMode.SUBWAY, """
+        assertExternalError("/transit/routes", TransportMode.PUBLIC_TRANSIT, """
                 { "metaData": { "plan": { "itineraries": [] } } }
                 """);
     }
 
     @Test
     void 대중교통_응답에_plan이_없으면_EXTERNAL_API_ERROR_예외를_던진다() {
-        assertExternalError("/transit/routes", TransportMode.SUBWAY, """
+        assertExternalError("/transit/routes", TransportMode.PUBLIC_TRANSIT, """
                 { "metaData": {} }
                 """);
     }

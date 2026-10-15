@@ -25,7 +25,7 @@ public class TmapDurationService {
     public int getDurationMinutes(double startX, double startY, double endX, double endY, TransportMode mode) {
         int totalSeconds = switch (mode) {
             case CAR -> fetchCarDurationSeconds(startX, startY, endX, endY);
-            case SUBWAY, BUS -> fetchTransitDurationSeconds(startX, startY, endX, endY);
+            case PUBLIC_TRANSIT -> fetchTransitDurationSeconds(startX, startY, endX, endY);
             case WALK -> fetchPedestrianDurationSeconds(startX, startY, endX, endY);
         };
         return totalSeconds / 60;

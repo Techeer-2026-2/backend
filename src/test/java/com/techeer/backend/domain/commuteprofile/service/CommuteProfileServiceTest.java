@@ -45,7 +45,7 @@ class CommuteProfileServiceTest {
 
         CommuteProfileCreateRequest request = new CommuteProfileCreateRequest(
                 CommuteType.TO_WORK,
-                TransportMode.SUBWAY,
+                TransportMode.PUBLIC_TRANSIT,
                 "2호선",
                 new LocationDto(37.5, 127.0, "집"),
                 new LocationDto(37.6, 127.1, "회사"));
@@ -66,7 +66,7 @@ class CommuteProfileServiceTest {
 
         CommuteProfileUpdateRequest request = new CommuteProfileUpdateRequest(
                 CommuteType.FROM_WORK,
-                TransportMode.SUBWAY,
+                TransportMode.PUBLIC_TRANSIT,
                 "9호선",
                 new LocationDto(37.5, 127.0, "회사"),
                 new LocationDto(37.6, 127.1, "집"));
