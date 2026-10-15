@@ -13,9 +13,11 @@ import com.techeer.backend.domain.commuteprofile.dto.CommuteProfileResponse;
 import com.techeer.backend.domain.commuteprofile.dto.CommuteProfileUpdateRequest;
 import com.techeer.backend.domain.commuteprofile.dto.LocationDto;
 import com.techeer.backend.domain.commuteprofile.entity.CommuteProfile;
+import com.techeer.backend.domain.commuteprofile.entity.CommuteRoute;
 import com.techeer.backend.domain.commuteprofile.entity.CommuteType;
 import com.techeer.backend.domain.commuteprofile.entity.Location;
 import com.techeer.backend.domain.commuteprofile.repository.CommuteProfileRepository;
+import com.techeer.backend.domain.commuteprofile.repository.CommuteRouteRepository;
 import com.techeer.backend.domain.tmap.TransportMode;
 import com.techeer.backend.domain.tmap.service.TmapDurationService;
 import com.techeer.backend.global.exception.BusinessException;
@@ -28,10 +30,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 class CommuteProfileServiceTest {
 
     private final CommuteProfileRepository commuteProfileRepository = mock(CommuteProfileRepository.class);
+    private final CommuteRouteRepository commuteRouteRepository = mock(CommuteRouteRepository.class);
     private final TmapDurationService tmapDurationService = mock(TmapDurationService.class);
     private final TransactionTemplate transactionTemplate = fakeTransactionTemplate();
-    private final CommuteProfileService commuteProfileService =
-            new CommuteProfileService(commuteProfileRepository, tmapDurationService, transactionTemplate);
+    private final CommuteProfileService commuteProfileService = new CommuteProfileService(
+            commuteProfileRepository, commuteRouteRepository, tmapDurationService, transactionTemplate);
 
     @Test
     void 등록하면_TMAP으로_평균_소요시간을_자동_계산한다() {
@@ -54,7 +57,9 @@ class CommuteProfileServiceTest {
     @Test
     void 수정하면_새로운_소요시간으로_갱신된다() {
         CommuteProfile profile = sampleProfile(1L);
+        CommuteRoute route = sampleRoute(profile);
         when(commuteProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+        when(commuteRouteRepository.findByCommuteProfileId(any())).thenReturn(Optional.of(route));
         when(tmapDurationService.getDurationMinutes(anyDouble(), anyDouble(), anyDouble(), anyDouble(), any()))
                 .thenReturn(40);
 
@@ -96,10 +101,13 @@ class CommuteProfileServiceTest {
     @Test
     void 삭제하면_repository_delete가_호출된다() {
         CommuteProfile profile = sampleProfile(1L);
+        CommuteRoute route = sampleRoute(profile);
         when(commuteProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+        when(commuteRouteRepository.findByCommuteProfileId(any())).thenReturn(Optional.of(route));
 
         commuteProfileService.delete(1L, 1L);
 
+        verify(commuteRouteRepository).delete(route);
         verify(commuteProfileRepository).delete(profile);
     }
 
@@ -107,11 +115,17 @@ class CommuteProfileServiceTest {
         return CommuteProfile.builder()
                 .memberId(memberId)
                 .commuteType(CommuteType.TO_WORK)
-                .transportMode(TransportMode.CAR)
                 .frequentRouteName("경부고속도로")
-                .averageDurationMinutes(30)
                 .departure(new Location(37.5, 127.0, "집"))
                 .arrival(new Location(37.6, 127.1, "회사"))
+                .build();
+    }
+
+    private CommuteRoute sampleRoute(CommuteProfile profile) {
+        return CommuteRoute.builder()
+                .commuteProfile(profile)
+                .transportMode(TransportMode.CAR)
+                .averageDurationMinutes(30)
                 .build();
     }
 
