@@ -91,7 +91,9 @@ public class TmapDurationService {
             }
 
             return response.features().stream()
-                    .filter(feature -> feature.properties() != null && feature.properties().totalTime() != null)
+                    .filter(feature -> feature != null
+                            && feature.properties() != null
+                            && feature.properties().totalTime() != null)
                     .findFirst()
                     .map(feature -> feature.properties().totalTime())
                     .orElseThrow(() -> new BusinessException(ErrorCode.EXTERNAL_API_ERROR));
