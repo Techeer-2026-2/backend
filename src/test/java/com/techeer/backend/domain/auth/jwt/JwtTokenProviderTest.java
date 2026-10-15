@@ -5,10 +5,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Date;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -88,6 +92,43 @@ class JwtTokenProviderTest {
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("JWT_SECRET");
         }
+    }
+
+    @Test
+    @DisplayName("회원 토큰에서 회원 ID 를 꺼낼 수 있다")
+    void userRoundTrip() {
+        assertThat(provider.parseUserId(provider.createUserAccessToken(9L), TokenType.ACCESS)).isEqualTo(9L);
+        assertThat(provider.parseUserId(provider.createUserRefreshToken(9L), TokenType.REFRESH)).isEqualTo(9L);
+    }
+
+    @Test
+    @DisplayName("광고주 토큰은 회원 토큰으로, 회원 토큰은 광고주 토큰으로 쓸 수 없다")
+    void audiencesAreNotInterchangeable() {
+        String advertiserAccess = provider.createAccessToken(5L);
+        String advertiserRefresh = provider.createRefreshToken(5L);
+        String userAccess = provider.createUserAccessToken(5L);
+        String userRefresh = provider.createUserRefreshToken(5L);
+
+        assertInvalid(() -> provider.parseUserId(advertiserAccess, TokenType.ACCESS));
+        assertInvalid(() -> provider.parseUserId(advertiserRefresh, TokenType.REFRESH));
+        assertInvalid(() -> provider.parseAdvertiserId(userAccess, TokenType.ACCESS));
+        assertInvalid(() -> provider.parseAdvertiserId(userRefresh, TokenType.REFRESH));
+    }
+
+    @Test
+    @DisplayName("대상(aud) 구분이 생기기 전에 발급된 광고주 토큰은 광고주용으로만 통한다")
+    void legacyTokenWithoutAudienceIsAdvertiserOnly() {
+        String legacy = Jwts.builder()
+                .id("legacy-1")
+                .subject("5")
+                .claim("type", "ACCESS")
+                .issuedAt(Date.from(NOW))
+                .expiration(Date.from(NOW.plus(Duration.ofMinutes(30))))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertThat(provider.parseAdvertiserId(legacy, TokenType.ACCESS)).isEqualTo(5L);
+        assertInvalid(() -> provider.parseUserId(legacy, TokenType.ACCESS));
     }
 
     private static JwtTokenProvider providerAt(Instant now) {

@@ -1,4 +1,7 @@
 # 테스트 프로필 — DB 접속 정보는 Testcontainers 가 @ServiceConnection 으로 주입한다.
+ranking:
+  scheduling:
+    enabled: false
 spring:
   jpa:
     hibernate:
