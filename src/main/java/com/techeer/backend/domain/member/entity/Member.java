@@ -53,4 +53,11 @@ public class Member extends BaseEntity {
     public static Member create(String email, String passwordHash, String nickname) {
         return new Member(email, passwordHash, nickname);
     }
+
+    /**
+     * 유효한 refresh token 의 해시를 바꾼다. 새로 로그인하면 이전 토큰은 더 이상 쓸 수 없게 된다.
+     */
+    public void changeRefreshTokenHash(String refreshTokenHash) {
+        this.refreshTokenHash = refreshTokenHash;
+    }
 }
