@@ -1,8 +1,11 @@
 package com.techeer.backend.domain.member.service;
 
+import com.techeer.backend.domain.auth.dto.LogoutRequest;
+import com.techeer.backend.domain.auth.dto.RefreshRequest;
 import com.techeer.backend.domain.auth.dto.TokenResponse;
 import com.techeer.backend.domain.auth.jwt.JwtTokenProvider;
 import com.techeer.backend.domain.auth.jwt.TokenHasher;
+import com.techeer.backend.domain.auth.jwt.TokenType;
 import com.techeer.backend.domain.member.dto.MemberLoginRequest;
 import com.techeer.backend.domain.member.dto.MemberSignupRequest;
 import com.techeer.backend.domain.member.dto.MemberSignupResponse;
@@ -90,5 +93,44 @@ public class MemberAuthService {
         String refreshToken = jwtTokenProvider.createMemberRefreshToken(member.getMemberId());
         member.changeRefreshTokenHash(TokenHasher.sha256Hex(refreshToken));
         return TokenResponse.of(accessToken, refreshToken, jwtTokenProvider.accessTokenExpiresInSeconds());
+    }
+
+    /**
+     * refresh token 으로 새 access token 을 발급한다. 이때 refresh token 도 새것으로 교체(회전)하고 이전 것은 폐기한다.
+     *
+     * <p>서명·만료가 맞아도 DB 에 저장된 해시와 다르면 거절한다. 같은 토큰으로 동시에 여러 번 요청해도
+     * DB 의 조건부 UPDATE 덕분에 한 번만 성공한다.
+     *
+     * @throws BusinessException 토큰이 유효하지 않거나 이미 폐기된 경우, 광고주 토큰을 보낸 경우
+     */
+    @Transactional
+    public TokenResponse refresh(RefreshRequest request) {
+        Long memberId = jwtTokenProvider.parseMemberId(request.refreshToken(), TokenType.REFRESH);
+
+        String accessToken = jwtTokenProvider.createMemberAccessToken(memberId);
+        String newRefreshToken = jwtTokenProvider.createMemberRefreshToken(memberId);
+
+        int rotated = memberRepository.rotateRefreshTokenHash(
+                memberId,
+                TokenHasher.sha256Hex(request.refreshToken()),
+                TokenHasher.sha256Hex(newRefreshToken));
+        if (rotated == 0) {
+            throw new BusinessException(ErrorCode.INVALID_TOKEN);
+        }
+        return TokenResponse.of(accessToken, newRefreshToken, jwtTokenProvider.accessTokenExpiresInSeconds());
+    }
+
+    /**
+     * 로그아웃한다. 저장된 refresh token 해시를 지워서 이 토큰으로는 더 이상 갱신할 수 없게 한다.
+     *
+     * <p>이미 로그아웃했거나 이미 교체된 옛 토큰이어도 에러 없이 성공으로 처리한다. 이미 만들어 준 access token 은
+     * 만료될 때까지(30분) 유효하다.
+     *
+     * @throws BusinessException 서명·만료·형식이 올바르지 않은 토큰인 경우
+     */
+    @Transactional
+    public void logout(LogoutRequest request) {
+        Long memberId = jwtTokenProvider.parseMemberId(request.refreshToken(), TokenType.REFRESH);
+        memberRepository.clearRefreshTokenHash(memberId, TokenHasher.sha256Hex(request.refreshToken()));
     }
 }

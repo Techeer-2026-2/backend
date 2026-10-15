@@ -1,5 +1,7 @@
 package com.techeer.backend.domain.member.controller;
 
+import com.techeer.backend.domain.auth.dto.LogoutRequest;
+import com.techeer.backend.domain.auth.dto.RefreshRequest;
 import com.techeer.backend.domain.auth.dto.TokenResponse;
 import com.techeer.backend.domain.member.dto.MemberLoginRequest;
 import com.techeer.backend.domain.member.dto.MemberSignupRequest;
@@ -56,5 +58,34 @@ public class MemberAuthController {
     @PostMapping("/login")
     public TokenResponse login(@Valid @RequestBody MemberLoginRequest request) {
         return memberAuthService.login(request);
+    }
+
+    @Operation(
+            summary = "토큰 갱신",
+            description = "refresh token 으로 새 access token 을 발급한다. refresh token 도 새것으로 교체되므로 "
+                    + "응답의 refresh token 을 다시 저장해야 하고, 이전 refresh token 은 더 쓸 수 없다.")
+    @ApiResponse(responseCode = "200", description = "갱신 성공")
+    @ApiResponse(responseCode = "400", description = "요청 값 오류",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "만료·위조·이미 사용했거나 폐기된 refresh token, 또는 광고주 토큰",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @PostMapping("/refresh")
+    public TokenResponse refresh(@Valid @RequestBody RefreshRequest request) {
+        return memberAuthService.refresh(request);
+    }
+
+    @Operation(
+            summary = "로그아웃",
+            description = "refresh token 을 폐기해 더 이상 토큰을 갱신할 수 없게 한다. 이미 로그아웃한 토큰으로 다시 "
+                    + "요청해도 204 이다. 이미 발급된 access token 은 만료(30분)될 때까지 유효하다.")
+    @ApiResponse(responseCode = "204", description = "로그아웃 완료")
+    @ApiResponse(responseCode = "400", description = "요청 값 오류",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "만료·위조된 refresh token, 또는 광고주 토큰",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@Valid @RequestBody LogoutRequest request) {
+        memberAuthService.logout(request);
+        return ResponseEntity.noContent().build();
     }
 }
