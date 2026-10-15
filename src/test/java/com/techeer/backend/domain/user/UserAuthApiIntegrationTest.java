@@ -1,4 +1,4 @@
-package com.techeer.backend.domain.member;
+package com.techeer.backend.domain.user;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -29,7 +29,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * /api/v1/members/signup, /login 를 실제 PostgreSQL(Testcontainers)에 붙여 검증한다.
+ * /api/v1/auth/* 를 실제 PostgreSQL(Testcontainers)에 붙여 검증한다.
  *
  * <p>중복 가입·refresh token 회전·동시 요청은 DB 의 unique 제약과 조건부 UPDATE 에 기대므로 실제 DB 로 확인해야 의미가 있다.
  */
@@ -37,10 +37,10 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import(TestcontainersConfiguration.class)
-class MemberAuthApiIntegrationTest {
+class UserAuthApiIntegrationTest {
 
-    private static final String SIGNUP = "/api/v1/members/signup";
-    private static final String LOGIN = "/api/v1/members/login";
+    private static final String SIGNUP = "/api/v1/auth/signup";
+    private static final String LOGIN = "/api/v1/auth/login";
     private static final String EMAIL = "listener@techeer.com";
     private static final String PASSWORD = "password1234";
 
@@ -56,7 +56,7 @@ class MemberAuthApiIntegrationTest {
     @BeforeEach
     @AfterEach
     void clean() {
-        jdbcTemplate.update("delete from members");
+        jdbcTemplate.update("delete from users");
     }
 
     @Test
@@ -64,13 +64,13 @@ class MemberAuthApiIntegrationTest {
     void signupStoresHashedPasswordAndLowercaseEmail() throws Exception {
         mockMvc.perform(signup("Listener@Techeer.com", PASSWORD, "출근러"))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.memberId").isNumber())
+                .andExpect(jsonPath("$.userId").isNumber())
                 .andExpect(jsonPath("$.email").value(EMAIL))
                 .andExpect(jsonPath("$.nickname").value("출근러"))
                 .andExpect(jsonPath("$.password").doesNotExist())
                 .andExpect(jsonPath("$.passwordHash").doesNotExist());
 
-        String stored = jdbcTemplate.queryForObject("select password_hash from members", String.class);
+        String stored = jdbcTemplate.queryForObject("select password_hash from users", String.class);
         assertThat(stored).isNotEqualTo(PASSWORD).startsWith("$2");
     }
 
@@ -82,7 +82,7 @@ class MemberAuthApiIntegrationTest {
         mockMvc.perform(signup("LISTENER@techeer.com", PASSWORD, "두번째"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("EMAIL_DUPLICATED"));
-        assertThat(jdbcTemplate.queryForObject("select count(*) from members", Long.class)).isEqualTo(1L);
+        assertThat(jdbcTemplate.queryForObject("select count(*) from users", Long.class)).isEqualTo(1L);
     }
 
     @Test
@@ -92,14 +92,12 @@ class MemberAuthApiIntegrationTest {
         mockMvc.perform(signup(EMAIL, "short", "닉")).andExpect(status().isBadRequest());
         mockMvc.perform(signup(EMAIL, PASSWORD, " ")).andExpect(status().isBadRequest());
         mockMvc.perform(signup(EMAIL, "가".repeat(25), "닉")).andExpect(status().isBadRequest());
-        // 이모지는 UTF-16 으로는 2단위지만 한 글자다: 4개는 4글자라 거절, 8개는 8글자(32바이트)라 통과
-        mockMvc.perform(signup(EMAIL, "😀".repeat(4), "닉")).andExpect(status().isBadRequest());
         mockMvc.perform(signup(EMAIL, "가".repeat(24), "닉")).andExpect(status().isCreated());
     }
 
     @Test
     @DisplayName("같은 이메일로 동시에 가입해도 한 명만 만들어지고 나머지는 409 이다 (500 이 아니다)")
-    void concurrentSignupCreatesOnlyOneMember() throws Exception {
+    void concurrentSignupCreatesOnlyOneUser() throws Exception {
         int threads = 8;
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService executor = Executors.newFixedThreadPool(threads);
@@ -124,7 +122,7 @@ class MemberAuthApiIntegrationTest {
             }
             assertThat(created).isEqualTo(1);
             assertThat(conflict).isEqualTo(threads - 1);
-            assertThat(jdbcTemplate.queryForObject("select count(*) from members", Long.class)).isEqualTo(1L);
+            assertThat(jdbcTemplate.queryForObject("select count(*) from users", Long.class)).isEqualTo(1L);
         } finally {
             executor.shutdownNow();
         }

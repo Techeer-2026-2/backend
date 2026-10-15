@@ -1,4 +1,4 @@
-package com.techeer.backend.domain.member.entity;
+package com.techeer.backend.domain.user.entity;
 
 import com.techeer.backend.global.entity.BaseEntity;
 import jakarta.persistence.Column;
@@ -12,7 +12,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * 음악 앱 회원. playlists.member_id, commute_profiles.member_id 가 이 테이블의 member_id 를 가리킨다.
+ * 음악 앱 회원(ERD 의 users). playlists.member_id, commute_profiles.member_id 가 이 테이블의 user_id 값을 담는다
+ * (두 테이블의 컬럼 이름이 member_id 이고 FK 제약은 없다).
  *
  * <p>광고주(advertisers)와는 별개의 계정이다. 두 계정의 토큰은 서로 바꿔 쓸 수 없다(TokenAudience).
  *
@@ -20,13 +21,13 @@ import lombok.NoArgsConstructor;
  */
 @Getter
 @Entity
-@Table(name = "members")
+@Table(name = "users")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Member extends BaseEntity {
+public class User extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long memberId;
+    private Long userId;
 
     @Column(nullable = false, unique = true)
     private String email;
@@ -34,14 +35,14 @@ public class Member extends BaseEntity {
     @Column(nullable = false)
     private String passwordHash;
 
-    @Column(nullable = false, length = 64)
+    @Column(nullable = false, length = 50)
     private String nickname;
 
     /** 현재 유효한 refresh token 의 SHA-256 해시. 로그아웃 상태이거나 로그인한 적이 없으면 null. */
     @Column(length = 64)
     private String refreshTokenHash;
 
-    private Member(String email, String passwordHash, String nickname) {
+    private User(String email, String passwordHash, String nickname) {
         this.email = email;
         this.passwordHash = passwordHash;
         this.nickname = nickname;
@@ -50,8 +51,8 @@ public class Member extends BaseEntity {
     /**
      * 신규 회원을 만든다. passwordHash 는 이미 해시된 값이어야 한다(평문 금지).
      */
-    public static Member create(String email, String passwordHash, String nickname) {
-        return new Member(email, passwordHash, nickname);
+    public static User create(String email, String passwordHash, String nickname) {
+        return new User(email, passwordHash, nickname);
     }
 
     /**

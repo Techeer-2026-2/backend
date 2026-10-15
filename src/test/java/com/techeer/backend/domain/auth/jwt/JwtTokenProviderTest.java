@@ -96,9 +96,9 @@ class JwtTokenProviderTest {
 
     @Test
     @DisplayName("회원 토큰에서 회원 ID 를 꺼낼 수 있다")
-    void memberRoundTrip() {
-        assertThat(provider.parseMemberId(provider.createMemberAccessToken(9L), TokenType.ACCESS)).isEqualTo(9L);
-        assertThat(provider.parseMemberId(provider.createMemberRefreshToken(9L), TokenType.REFRESH)).isEqualTo(9L);
+    void userRoundTrip() {
+        assertThat(provider.parseUserId(provider.createUserAccessToken(9L), TokenType.ACCESS)).isEqualTo(9L);
+        assertThat(provider.parseUserId(provider.createUserRefreshToken(9L), TokenType.REFRESH)).isEqualTo(9L);
     }
 
     @Test
@@ -106,13 +106,13 @@ class JwtTokenProviderTest {
     void audiencesAreNotInterchangeable() {
         String advertiserAccess = provider.createAccessToken(5L);
         String advertiserRefresh = provider.createRefreshToken(5L);
-        String memberAccess = provider.createMemberAccessToken(5L);
-        String memberRefresh = provider.createMemberRefreshToken(5L);
+        String userAccess = provider.createUserAccessToken(5L);
+        String userRefresh = provider.createUserRefreshToken(5L);
 
-        assertInvalid(() -> provider.parseMemberId(advertiserAccess, TokenType.ACCESS));
-        assertInvalid(() -> provider.parseMemberId(advertiserRefresh, TokenType.REFRESH));
-        assertInvalid(() -> provider.parseAdvertiserId(memberAccess, TokenType.ACCESS));
-        assertInvalid(() -> provider.parseAdvertiserId(memberRefresh, TokenType.REFRESH));
+        assertInvalid(() -> provider.parseUserId(advertiserAccess, TokenType.ACCESS));
+        assertInvalid(() -> provider.parseUserId(advertiserRefresh, TokenType.REFRESH));
+        assertInvalid(() -> provider.parseAdvertiserId(userAccess, TokenType.ACCESS));
+        assertInvalid(() -> provider.parseAdvertiserId(userRefresh, TokenType.REFRESH));
     }
 
     @Test
@@ -128,7 +128,7 @@ class JwtTokenProviderTest {
                 .compact();
 
         assertThat(provider.parseAdvertiserId(legacy, TokenType.ACCESS)).isEqualTo(5L);
-        assertInvalid(() -> provider.parseMemberId(legacy, TokenType.ACCESS));
+        assertInvalid(() -> provider.parseUserId(legacy, TokenType.ACCESS));
     }
 
     private static JwtTokenProvider providerAt(Instant now) {

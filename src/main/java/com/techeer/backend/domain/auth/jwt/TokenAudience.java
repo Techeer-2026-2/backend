@@ -6,5 +6,5 @@ package com.techeer.backend.domain.auth.jwt;
  */
 public enum TokenAudience {
     ADVERTISER,
-    MEMBER
+    USER
 }
