@@ -16,6 +16,11 @@ public enum ErrorCode {
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."),
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
 
+    // 음악 앱 플레이리스트
+    PLAYLIST_NOT_FOUND(HttpStatus.NOT_FOUND, "플레이리스트를 찾을 수 없습니다."),
+    PLAYLIST_FORBIDDEN(HttpStatus.FORBIDDEN, "이 플레이리스트를 수정할 권한이 없습니다."),
+    PLAYLIST_EMPTY(HttpStatus.CONFLICT, "곡을 추가한 뒤 플레이리스트를 공유할 수 있습니다."),
+
     // 타겟 유저
     TARGET_USER_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 유저입니다."),
 

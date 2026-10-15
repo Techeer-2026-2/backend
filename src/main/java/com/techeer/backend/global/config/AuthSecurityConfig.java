@@ -109,6 +109,8 @@ public class AuthSecurityConfig {
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup", "/api/v1/auth/login").permitAll()
                         .requestMatchers("/api/v1/auth/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/shared/playlists/*").permitAll()
+                        .requestMatchers("/api/v1/playlists/**", "/api/v1/shared/playlists/**").authenticated()
                         // 기존 광고·랭킹 API는 기존 접근 계약을 유지한다.
                         .anyRequest().permitAll())
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(authEntryPoint))
