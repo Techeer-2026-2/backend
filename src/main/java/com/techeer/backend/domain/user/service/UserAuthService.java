@@ -1,9 +1,9 @@
-package com.techeer.backend.domain.member.service;
+package com.techeer.backend.domain.user.service;
 
-import com.techeer.backend.domain.member.dto.MemberSignupRequest;
-import com.techeer.backend.domain.member.dto.MemberSignupResponse;
-import com.techeer.backend.domain.member.entity.Member;
-import com.techeer.backend.domain.member.repository.MemberRepository;
+import com.techeer.backend.domain.user.dto.UserSignupRequest;
+import com.techeer.backend.domain.user.dto.UserSignupResponse;
+import com.techeer.backend.domain.user.entity.User;
+import com.techeer.backend.domain.user.repository.UserRepository;
 import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
 import java.util.Locale;
@@ -16,13 +16,13 @@ import org.springframework.transaction.annotation.Transactional;
  * 음악 앱 회원의 가입. 광고주 가입(AdvertiserService)과 같은 방식을 쓴다.
  */
 @Service
-public class MemberAuthService {
+public class UserAuthService {
 
-    private final MemberRepository memberRepository;
+    private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
-    public MemberAuthService(MemberRepository memberRepository, PasswordEncoder passwordEncoder) {
-        this.memberRepository = memberRepository;
+    public UserAuthService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+        this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -35,18 +35,18 @@ public class MemberAuthService {
      * @throws BusinessException 이미 가입된 이메일인 경우
      */
     @Transactional
-    public MemberSignupResponse signup(MemberSignupRequest request) {
+    public UserSignupResponse signup(UserSignupRequest request) {
         String email = request.email().toLowerCase(Locale.ROOT);
-        if (memberRepository.existsByEmail(email)) {
+        if (userRepository.existsByEmail(email)) {
             throw new BusinessException(ErrorCode.EMAIL_DUPLICATED);
         }
-        Member member = Member.create(email, passwordEncoder.encode(request.password()), request.nickname().trim());
+        User user = User.create(email, passwordEncoder.encode(request.password()), request.nickname().trim());
         try {
             // save 가 아니라 saveAndFlush: 제약 위반이 이 try 안에서 바로 드러나야 잡을 수 있다.
-            memberRepository.saveAndFlush(member);
+            userRepository.saveAndFlush(user);
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(ErrorCode.EMAIL_DUPLICATED);
         }
-        return MemberSignupResponse.from(member);
+        return UserSignupResponse.from(user);
     }
 }

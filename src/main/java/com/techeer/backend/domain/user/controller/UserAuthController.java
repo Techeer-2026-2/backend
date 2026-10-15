@@ -1,8 +1,8 @@
-package com.techeer.backend.domain.member.controller;
+package com.techeer.backend.domain.user.controller;
 
-import com.techeer.backend.domain.member.dto.MemberSignupRequest;
-import com.techeer.backend.domain.member.dto.MemberSignupResponse;
-import com.techeer.backend.domain.member.service.MemberAuthService;
+import com.techeer.backend.domain.user.dto.UserSignupRequest;
+import com.techeer.backend.domain.user.dto.UserSignupResponse;
+import com.techeer.backend.domain.user.service.UserAuthService;
 import com.techeer.backend.global.exception.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -22,12 +22,12 @@ import org.springframework.web.bind.annotation.RestController;
  * 음악 앱 회원 가입 API. 광고주 계정(/owners)과는 별개이다.
  */
 @RestController
-@RequestMapping("/api/v1/members")
+@RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
-@Tag(name = "Member Auth", description = "음악 앱 회원 가입")
-public class MemberAuthController {
+@Tag(name = "User Auth", description = "음악 앱 회원 가입")
+public class UserAuthController {
 
-    private final MemberAuthService memberAuthService;
+    private final UserAuthService userAuthService;
 
     @Operation(
             summary = "회원가입",
@@ -38,7 +38,7 @@ public class MemberAuthController {
     @ApiResponse(responseCode = "409", description = "이미 가입된 이메일",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @PostMapping("/signup")
-    public ResponseEntity<MemberSignupResponse> signup(@Valid @RequestBody MemberSignupRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(memberAuthService.signup(request));
+    public ResponseEntity<UserSignupResponse> signup(@Valid @RequestBody UserSignupRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(userAuthService.signup(request));
     }
 }
