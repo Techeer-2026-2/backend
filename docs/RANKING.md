@@ -6,9 +6,10 @@
 
 ## 빠르게 확인하기
 
-Docker가 실행 중일 때 저장소 루트에서:
+Docker가 실행 중일 때 저장소 루트에서, 데모 DB 비밀번호를 직접 정해 환경변수로 넘긴다(기본값 없음, 안 정하면 실행되지 않는다):
 
 ```powershell
+$env:POSTGRES_PASSWORD='<데모 DB 비밀번호>'   # macOS/Linux: export POSTGRES_PASSWORD=...
 docker compose -f docker-compose.ranking-demo.yml up --build -d
 ```
 
@@ -31,6 +32,8 @@ docker compose up -d db
 이 경우 주소는 `http://localhost:8080/rankings/`이다. 가상 기록은 명시적으로 `local,ranking-demo` 프로필을 사용할 때만 생성된다. 운영 DB에서는 데모 프로필을 사용하지 않는다.
 
 ## API 연결
+
+쓰기 API(곡 등록·위치·재생 시작·종료)는 요청 헤더 `X-Member-Id: <회원 번호>` 가 필요하다. 없으면 400이다. 회원 번호는 본문에 넣지 않고 이 헤더로만 받으며, 재생 종료 이벤트는 **그 회원이 시작한 세션**에만 쓸 수 있다(남의 세션은 404). 조회 API(차트·곡 상세)는 헤더 없이 공개다.
 
 모든 날짜 입력은 UTC 또는 시간대 오프셋이 있는 ISO 8601이다. 날짜 예시는 과거 시각이므로 재현 시 원하는 완료 시간대를 재집계해야 한다.
 
@@ -57,7 +60,6 @@ docker compose up -d db
 ```json
 {
   "sessionId":"01c6c599-a6b0-431e-a751-e8829d88bd62",
-  "userId":1001,
   "trackId":"itunes-123",
   "startedAt":"2026-10-03T10:15:00+09:00",
   "location":{"lat":37.5442,"lng":127.0561,"accuracyMeters":25,"recordedAt":"2026-10-03T10:14:50+09:00"}
@@ -66,7 +68,7 @@ docker compose up -d db
 
 `location`은 선택이다. 생략하면 `latest_user_location` 중 시작 시각 이전의 최신 위치를 사용한다. 재생 시작 이벤트가 지연 도착했는데 이미 더 새로운 위치로 덮인 경우에는 과거 위치를 추정하지 않고 전체 차트로 처리한다. 지연 전송을 지원하는 앱은 시작 시 저장한 위치를 직접 포함해야 한다. 위치는 세션에 H3 셀로 고정되므로 이후 GPS 이동의 영향을 받지 않는다.
 
-최신 위치 API의 본문은 `{"userId":1001,"location":{...}}`이다. 시작 시점 대비 30초 초과는 `STALE`, 정확도 100m 초과는 `INACCURATE`, 위치 없음은 `MISSING`이며 모두 전체 차트에만 반영된다. 비정상 좌표, 음수·무한 정확도, 미래 시각은 400이다.
+최신 위치 API의 본문은 `{"location":{...}}`이다(회원은 `X-Member-Id` 헤더). 시작 시점 대비 30초 초과는 `STALE`, 정확도 100m 초과는 `INACCURATE`, 위치 없음은 `MISSING`이며 모두 전체 차트에만 반영된다. 비정상 좌표, 음수·무한 정확도, 미래 시각은 400이다.
 
 3. 종료:
 
@@ -85,7 +87,7 @@ docker compose up -d db
 [playback-client.js](playback-client.js)는 기존 플레이어 콜백에 연결할 ES 모듈 예제다:
 
 ```javascript
-const session = createListeningSession({ userId, trackId, location });
+const session = createListeningSession({ memberId, trackId, location });
 await session.start(); // 실패하면 동일 객체의 start()로 재시도
 // 실제 곡 재생이 끝났을 때:
 await session.finish(playedSeconds / durationSeconds);
@@ -154,7 +156,7 @@ OneDrive가 `build` 파일을 잠그면 `-PbuildOutputDir=C:/temp/ranking-build`
 
 ## 팀 앱에 합칠 때
 
-현재 저장소에 음악 사용자 인증/플레이어가 없으므로 `userId`는 양수 내부 ID 계약으로 받는다. 인증 모듈이 들어오면 인증된 사용자 ID로 치환하고 세션 소유권을 확인해야 한다. 곡 등록·위치·재생 수집 API는 그 전까지 신뢰된 개발 클라이언트에서만 사용한다. 실제 전체 곡 재생, 사용자 로그인, 운영용 행정 도시 데이터 적재는 별도 모듈 연결 작업이다.
+회원은 팀 공통 임시 방식인 `X-Member-Id` 헤더(`@MemberId`)로 받는다. 값을 검증하지 않으므로 개인정보가 없는 개발·데모 용도로만 쓰고, 실제 인증이 들어오면 `MemberIdArgumentResolver` 한 곳만 바꾸면 된다. 재생 종료 이벤트의 세션 소유권은 이미 확인한다. **곡 등록·갱신(`PUT /music/tracks/...`)은 아직 관리자 권한이 없어 헤더가 있는 누구나 호출할 수 있다.** 관리자 구분은 인증 도입(#63)과 곡 저장소 통합(#65) 때 정한다. 실제 전체 곡 재생, 사용자 로그인, 운영용 행정 도시 데이터 적재는 별도 모듈 연결 작업이다.
 
 P1 집계는 한 시간의 이벤트를 메모리에서 계산한다. 큰 부하에서 처리량·힙 사용량을 측정한 뒤 SQL 사전 집계나 워커로 분리한다. 원본 이벤트와 위치 데이터의 보관/삭제 기간은 팀 정책 확정 후 배치를 추가해야 한다.
 

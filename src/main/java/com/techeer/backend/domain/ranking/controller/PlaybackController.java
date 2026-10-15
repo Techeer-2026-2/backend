@@ -52,6 +52,7 @@ public class PlaybackController {
         return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK).body(new Data<>(result));
     }
 
+    // @MemberId 는 헤더 존재만 강제한다. 관리자 권한 구분은 없어 헤더가 있는 누구나 호출할 수 있다(docs/RANKING.md 참고).
     @PutMapping("/music/tracks/{trackId}")
     @Operation(summary = "곡 메타데이터 등록·갱신 (내부 카탈로그 연동용)")
     public Data<Track> saveTrack(@MemberId Long memberId, @PathVariable String trackId,

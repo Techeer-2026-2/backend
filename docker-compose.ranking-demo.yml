@@ -1,11 +1,12 @@
 # 가상 데이터 확인용 독립 DB. 기존 docker-compose.yml의 DB 볼륨을 사용하지 않는다.
+# 실행 전에 POSTGRES_PASSWORD 환경변수를 직접 정해야 한다(기본 비밀번호 없음).
 services:
   ranking-db:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ranking_demo
       POSTGRES_USER: ${POSTGRES_USER:-cp_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cp_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 를 설정하세요}
     volumes:
       - ranking-demo-data:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +23,7 @@ services:
       SPRING_PROFILES_ACTIVE: local,ranking-demo
       SPRING_DATASOURCE_URL: jdbc:postgresql://ranking-db:5432/ranking_demo
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-cp_user}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-cp_password}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 를 설정하세요}
     ports:
       - "127.0.0.1:8081:8080"
 volumes:

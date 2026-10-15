@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
@@ -61,6 +62,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 class RankingIntegrationTest {
     private static final Instant HOUR = Instant.parse("2026-10-03T02:00:00Z");
     private static final Instant NOW = HOUR.plusSeconds(3600);
+    private static final String MEMBER = "X-Member-Id";
     @Autowired private PlaybackService playback;
     @Autowired private RankingBatchService batch;
     @Autowired private RankingQueryService query;
@@ -94,10 +96,10 @@ class RankingIntegrationTest {
     void validatesLocationRelativeToStartNotCompletion(int age, double accuracy, String expected, String scope) {
         Instant start = HOUR.plusSeconds(100);
         for (int user = 1; user <= 20; user++) {
-            StartRequest request = new StartRequest(UUID.randomUUID(), (long) user, "A", start,
+            StartRequest request = new StartRequest(UUID.randomUUID(), "A", start,
                     new LocationInput(37.5442, 127.0561, accuracy, start.minusSeconds(age)));
-            assertThat(playback.start(request).locationStatus()).isEqualTo(expected);
-            playback.record(event(request.sessionId(), start.plusSeconds(180), 0.9));
+            assertThat(playback.start(user, request).locationStatus()).isEqualTo(expected);
+            playback.record(user, event(request.sessionId(), start.plusSeconds(180), 0.9));
         }
         batch.rebuild(HOUR);
         assertThat(query.nearby(37.5442, 127.0561, 20).scope()).isEqualTo(scope);
@@ -108,12 +110,12 @@ class RankingIntegrationTest {
     void movementAfterStartDoesNotMoveTheVote() {
         Instant start = HOUR.plusSeconds(100);
         for (int user = 1; user <= 20; user++) {
-            playback.updateLocation(new LocationRequest((long) user, location(start)));
+            playback.updateLocation(user, new LocationRequest(location(start)));
             UUID session = UUID.randomUUID();
-            playback.start(new StartRequest(session, (long) user, "A", start, null));
-            playback.updateLocation(new LocationRequest((long) user,
+            playback.start(user, new StartRequest(session, "A", start, null));
+            playback.updateLocation(user, new LocationRequest(
                     new LocationInput(35.1796, 129.0756, 10.0, start.plusSeconds(120))));
-            playback.record(event(session, start.plusSeconds(180), 1));
+            playback.record(user, event(session, start.plusSeconds(180), 1));
         }
         batch.rebuild(HOUR);
         assertThat(query.nearby(37.5442, 127.0561, 20).scope()).isEqualTo("NEARBY");
@@ -123,9 +125,9 @@ class RankingIntegrationTest {
     @Test
     void keepsLatestLocationWhenAnOlderUpdateArrives() {
         Instant start = HOUR.plusSeconds(100);
-        playback.updateLocation(new LocationRequest(1L, location(start)));
-        playback.updateLocation(new LocationRequest(1L, new LocationInput(35.0, 129.0, 10.0, start.minusSeconds(60))));
-        var result = playback.start(new StartRequest(UUID.randomUUID(), 1L, "A", start, null));
+        playback.updateLocation(1L, new LocationRequest(location(start)));
+        playback.updateLocation(1L, new LocationRequest(new LocationInput(35.0, 129.0, 10.0, start.minusSeconds(60))));
+        var result = playback.start(1L, new StartRequest(UUID.randomUUID(), "A", start, null));
         assertThat(result.locationStatus()).isEqualTo("VALID");
         assertThat(jdbc.queryForObject("SELECT h3_cell FROM ranking.playback_session", String.class))
                 .isEqualTo(geo.cell(37.5442, 127.0561));
@@ -133,30 +135,30 @@ class RankingIntegrationTest {
 
     @Test
     void rejectsInvalidAndFutureLocationAndFutureCompletion() throws Exception {
-        var request = new StartRequest(UUID.randomUUID(), 1L, "A", HOUR,
+        var request = new StartRequest(UUID.randomUUID(), "A", HOUR,
                 new LocationInput(91.0, 127.0, 10.0, HOUR));
-        mvc.perform(post("/api/v1/playback/sessions").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(post("/api/v1/playback/sessions").header(MEMBER, "1").contentType(MediaType.APPLICATION_JSON)
                 .content(mapper.writeValueAsBytes(request))).andExpect(status().isBadRequest());
-        assertThatThrownBy(() -> playback.start(new StartRequest(UUID.randomUUID(), 1L, "A", HOUR,
+        assertThatThrownBy(() -> playback.start(1L, new StartRequest(UUID.randomUUID(), "A", HOUR,
                 location(HOUR.plusSeconds(1))))).isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> playback.start(new StartRequest(UUID.randomUUID(), 1L, "A", NOW.plusSeconds(1), null)))
+        assertThatThrownBy(() -> playback.start(1L, new StartRequest(UUID.randomUUID(), "A", NOW.plusSeconds(1), null)))
                 .isInstanceOf(BusinessException.class);
         UUID session = start(1, "A", HOUR, null);
-        assertThatThrownBy(() -> playback.record(event(session, NOW.plusSeconds(1), 1))).isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> playback.record(event(session, HOUR.minusSeconds(1), 1))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> playback.record(1L, event(session, NOW.plusSeconds(1), 1))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> playback.record(1L, event(session, HOUR.minusSeconds(1), 1))).isInstanceOf(BusinessException.class);
     }
 
     @Test
     void eventAndSessionRetriesAreIdempotentAndConflictsReturn409() throws Exception {
-        StartRequest request = new StartRequest(UUID.randomUUID(), 1L, "A", HOUR, location(HOUR));
-        assertThat(playback.start(request).created()).isTrue();
-        assertThat(playback.start(request).created()).isFalse();
+        StartRequest request = new StartRequest(UUID.randomUUID(), "A", HOUR, location(HOUR));
+        assertThat(playback.start(1L, request).created()).isTrue();
+        assertThat(playback.start(1L, request).created()).isFalse();
         EventRequest completion = event(request.sessionId(), HOUR.plusSeconds(180), 1);
-        mvc.perform(post("/api/v1/playback/events").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(post("/api/v1/playback/events").header(MEMBER, "1").contentType(MediaType.APPLICATION_JSON)
                 .content(mapper.writeValueAsBytes(completion))).andExpect(status().isCreated());
-        mvc.perform(post("/api/v1/playback/events").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(post("/api/v1/playback/events").header(MEMBER, "1").contentType(MediaType.APPLICATION_JSON)
                 .content(mapper.writeValueAsBytes(completion))).andExpect(status().isOk());
-        mvc.perform(post("/api/v1/playback/events").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(post("/api/v1/playback/events").header(MEMBER, "1").contentType(MediaType.APPLICATION_JSON)
                 .content(mapper.writeValueAsBytes(event(request.sessionId(), HOUR.plusSeconds(180), 1))))
                 .andExpect(status().isConflict());
         assertThat(jdbc.queryForObject("SELECT count(*) FROM ranking.playback_event", Long.class)).isEqualTo(1);
@@ -171,7 +173,7 @@ class RankingIntegrationTest {
             for (int i = 0; i < 8; i++) {
                 futures.add(executor.submit(() -> {
                     signal.await();
-                    return playback.record(event).created();
+                    return playback.record(1L, event).created();
                 }));
             }
             signal.countDown();
@@ -202,7 +204,7 @@ class RankingIntegrationTest {
         audience(20, HOUR.minusSeconds(3600), null);
         batch.rebuild(HOUR.minusSeconds(3600));
         UUID session = start(1, "A", HOUR.minusSeconds(20), null);
-        playback.record(event(session, HOUR, 1));
+        playback.record(1L, event(session, HOUR, 1));
         for (int user = 2; user <= 20; user++) {
             complete(user, "A", HOUR, null);
         }
@@ -217,9 +219,9 @@ class RankingIntegrationTest {
     void belowNinetyPercentAndSkippedDoNotCount() {
         for (int user = 1; user <= 20; user++) {
             UUID session = start(user, "A", HOUR, location(HOUR));
-            playback.record(event(session, HOUR.plusSeconds(180), 0.8999));
+            playback.record(user, event(session, HOUR.plusSeconds(180), 0.8999));
             UUID skipped = start(user, "A", HOUR, location(HOUR));
-            playback.record(new EventRequest(UUID.randomUUID(), skipped, EventType.TRACK_SKIPPED, 1.0, HOUR.plusSeconds(200)));
+            playback.record(user, new EventRequest(UUID.randomUUID(), skipped, EventType.TRACK_SKIPPED, 1.0, HOUR.plusSeconds(200)));
         }
         batch.rebuild(HOUR);
         assertThat(query.global(20).items()).isEmpty();
@@ -347,6 +349,58 @@ class RankingIntegrationTest {
         assertThat(query.global(20).status()).isEqualTo("INSUFFICIENT_DATA");
     }
 
+    @Test
+    void writeApisRequireMemberIdHeader() throws Exception {
+        StartRequest start = new StartRequest(UUID.randomUUID(), "A", HOUR, location(HOUR));
+        byte[] startBody = mapper.writeValueAsBytes(start);
+        byte[] eventBody = mapper.writeValueAsBytes(event(start.sessionId(), HOUR.plusSeconds(180), 1));
+        byte[] locationBody = mapper.writeValueAsBytes(new LocationRequest(location(HOUR)));
+        byte[] trackBody = mapper.writeValueAsBytes(new TrackInput("곡", "가수", null, null));
+        mvc.perform(post("/api/v1/locations").contentType(MediaType.APPLICATION_JSON).content(locationBody))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("MISSING_MEMBER_ID"));
+        mvc.perform(post("/api/v1/playback/sessions").contentType(MediaType.APPLICATION_JSON).content(startBody))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/v1/playback/events").contentType(MediaType.APPLICATION_JSON).content(eventBody))
+                .andExpect(status().isBadRequest());
+        mvc.perform(put("/api/v1/music/tracks/Z").contentType(MediaType.APPLICATION_JSON).content(trackBody))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/v1/playback/sessions").header(MEMBER, "abc").contentType(MediaType.APPLICATION_JSON)
+                .content(startBody)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_MEMBER_ID"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM ranking.playback_session", Long.class)).isZero();
+    }
+
+    @Test
+    void memberIdComesFromHeaderNotBody() throws Exception {
+        String body = """
+                {"sessionId":"%s","trackId":"A","userId":999,"startedAt":"%s"}
+                """.formatted(UUID.randomUUID(), HOUR);
+        mvc.perform(post("/api/v1/playback/sessions").header(MEMBER, "7").contentType(MediaType.APPLICATION_JSON)
+                .content(body)).andExpect(status().isCreated());
+        assertThat(jdbc.queryForObject("SELECT user_id FROM ranking.playback_session", Long.class)).isEqualTo(7L);
+    }
+
+    @Test
+    void cannotWriteEventToAnotherMembersSession() throws Exception {
+        UUID session = start(1, "A", HOUR, null);
+        mvc.perform(post("/api/v1/playback/events").header(MEMBER, "2").contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsBytes(event(session, HOUR.plusSeconds(180), 1))))
+                .andExpect(status().isNotFound());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM ranking.playback_event", Long.class)).isZero();
+        mvc.perform(post("/api/v1/playback/events").header(MEMBER, "1").contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsBytes(event(session, HOUR.plusSeconds(180), 1))))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void sameSessionIdFromAnotherMemberConflicts() throws Exception {
+        StartRequest request = new StartRequest(UUID.randomUUID(), "A", HOUR, null);
+        mvc.perform(post("/api/v1/playback/sessions").header(MEMBER, "1").contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsBytes(request))).andExpect(status().isCreated());
+        mvc.perform(post("/api/v1/playback/sessions").header(MEMBER, "2").contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsBytes(request))).andExpect(status().isConflict());
+        assertThat(jdbc.queryForObject("SELECT user_id FROM ranking.playback_session", Long.class)).isEqualTo(1L);
+    }
+
     private void audience(int count, Instant start, LocationInput location) {
         for (int user = 1; user <= count; user++) {
             complete(user, "A", start, location);
@@ -354,12 +408,12 @@ class RankingIntegrationTest {
     }
 
     private void complete(long user, String track, Instant start, LocationInput location) {
-        playback.record(event(start(user, track, start, location), start.plusSeconds(180), 1));
+        playback.record(user, event(start(user, track, start, location), start.plusSeconds(180), 1));
     }
 
     private UUID start(long user, String track, Instant at, LocationInput location) {
         UUID id = UUID.randomUUID();
-        playback.start(new StartRequest(id, user, track, at, location));
+        playback.start(user, new StartRequest(id, track, at, location));
         return id;
     }
 
