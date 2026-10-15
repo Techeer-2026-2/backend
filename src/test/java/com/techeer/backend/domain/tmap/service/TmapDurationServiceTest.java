@@ -68,6 +68,36 @@ class TmapDurationServiceTest {
     }
 
     @Test
+    void 도보_소요시간을_분으로_변환한다() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://apis.openapi.sk.com");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+
+        server.expect(requestTo("https://apis.openapi.sk.com/tmap/routes/pedestrian?version=1"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("""
+                        {
+                          "features": [
+                            { "properties": { "totalTime": 780, "pointType": "SP" } },
+                            { "properties": {} }
+                          ]
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        TmapDurationService service = new TmapDurationService(builder.build());
+
+        int minutes = service.getDurationMinutes(127.0, 37.5, 127.1, 37.6, TransportMode.WALK);
+
+        assertThat(minutes).isEqualTo(13);
+    }
+
+    @Test
+    void 도보_응답에_totalTime이_없으면_EXTERNAL_API_ERROR_예외를_던진다() {
+        assertExternalError("/tmap/routes/pedestrian?version=1", TransportMode.WALK, """
+                { "features": [ { "properties": {} } ] }
+                """);
+    }
+
+    @Test
     void TMAP_호출이_실패하면_EXTERNAL_API_ERROR_예외를_던진다() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://apis.openapi.sk.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
