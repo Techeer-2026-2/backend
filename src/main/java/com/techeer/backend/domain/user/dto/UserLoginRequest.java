@@ -1,10 +1,10 @@
-package com.techeer.backend.domain.member.dto;
+package com.techeer.backend.domain.user.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 @Schema(description = "음악 앱 로그인 요청")
-public record MemberLoginRequest(
+public record UserLoginRequest(
         @Schema(description = "가입한 이메일", example = "listener@techeer.com")
         @NotBlank
         String email,
@@ -18,6 +18,6 @@ public record MemberLoginRequest(
      */
     @Override
     public String toString() {
-        return "MemberLoginRequest[email=" + email + ", password=****]";
+        return "UserLoginRequest[email=" + email + ", password=****]";
     }
 }

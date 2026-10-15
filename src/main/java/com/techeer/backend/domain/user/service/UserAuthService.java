@@ -1,4 +1,4 @@
-package com.techeer.backend.domain.member.service;
+package com.techeer.backend.domain.user.service;
 
 import com.techeer.backend.domain.auth.dto.LogoutRequest;
 import com.techeer.backend.domain.auth.dto.RefreshRequest;
@@ -6,11 +6,11 @@ import com.techeer.backend.domain.auth.dto.TokenResponse;
 import com.techeer.backend.domain.auth.jwt.JwtTokenProvider;
 import com.techeer.backend.domain.auth.jwt.TokenHasher;
 import com.techeer.backend.domain.auth.jwt.TokenType;
-import com.techeer.backend.domain.member.dto.MemberLoginRequest;
-import com.techeer.backend.domain.member.dto.MemberSignupRequest;
-import com.techeer.backend.domain.member.dto.MemberSignupResponse;
-import com.techeer.backend.domain.member.entity.Member;
-import com.techeer.backend.domain.member.repository.MemberRepository;
+import com.techeer.backend.domain.user.dto.UserLoginRequest;
+import com.techeer.backend.domain.user.dto.UserSignupRequest;
+import com.techeer.backend.domain.user.dto.UserSignupResponse;
+import com.techeer.backend.domain.user.entity.User;
+import com.techeer.backend.domain.user.repository.UserRepository;
 import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
 import java.util.Locale;
@@ -21,12 +21,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 음악 앱 회원의 가입과 인증(로그인·토큰 갱신·로그아웃). 광고주 인증(AuthService)과 같은 방식을 쓰되
- * 회원 전용 토큰(대상 MEMBER)을 발급하고 검증한다.
+ * 회원 전용 토큰(대상 USER)을 발급하고 검증한다.
  */
 @Service
-public class MemberAuthService {
+public class UserAuthService {
 
-    private final MemberRepository memberRepository;
+    private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
 
@@ -36,11 +36,11 @@ public class MemberAuthService {
      */
     private final String dummyPasswordHash;
 
-    public MemberAuthService(
-            MemberRepository memberRepository,
+    public UserAuthService(
+            UserRepository userRepository,
             PasswordEncoder passwordEncoder,
             JwtTokenProvider jwtTokenProvider) {
-        this.memberRepository = memberRepository;
+        this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
         this.dummyPasswordHash = passwordEncoder.encode("dummy-password-for-timing");
@@ -55,19 +55,19 @@ public class MemberAuthService {
      * @throws BusinessException 이미 가입된 이메일인 경우
      */
     @Transactional
-    public MemberSignupResponse signup(MemberSignupRequest request) {
+    public UserSignupResponse signup(UserSignupRequest request) {
         String email = request.email().toLowerCase(Locale.ROOT);
-        if (memberRepository.existsByEmail(email)) {
+        if (userRepository.existsByEmail(email)) {
             throw new BusinessException(ErrorCode.EMAIL_DUPLICATED);
         }
-        Member member = Member.create(email, passwordEncoder.encode(request.password()), request.nickname().trim());
+        User user = User.create(email, passwordEncoder.encode(request.password()), request.nickname().trim());
         try {
             // save 가 아니라 saveAndFlush: 제약 위반이 이 try 안에서 바로 드러나야 잡을 수 있다.
-            memberRepository.saveAndFlush(member);
+            userRepository.saveAndFlush(user);
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(ErrorCode.EMAIL_DUPLICATED);
         }
-        return MemberSignupResponse.from(member);
+        return UserSignupResponse.from(user);
     }
 
     /**
@@ -79,19 +79,19 @@ public class MemberAuthService {
      * @throws BusinessException 로그인 정보가 맞지 않는 경우
      */
     @Transactional
-    public TokenResponse login(MemberLoginRequest request) {
+    public TokenResponse login(UserLoginRequest request) {
         String email = request.email().toLowerCase(Locale.ROOT);
-        Member member = memberRepository.findByEmailAndDeletedAtIsNull(email).orElse(null);
+        User user = userRepository.findByEmailAndDeletedAtIsNull(email).orElse(null);
 
-        String hashToCompare = member == null ? dummyPasswordHash : member.getPasswordHash();
+        String hashToCompare = user == null ? dummyPasswordHash : user.getPasswordHash();
         boolean passwordMatches = passwordEncoder.matches(request.password(), hashToCompare);
-        if (member == null || !passwordMatches) {
+        if (user == null || !passwordMatches) {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
 
-        String accessToken = jwtTokenProvider.createMemberAccessToken(member.getMemberId());
-        String refreshToken = jwtTokenProvider.createMemberRefreshToken(member.getMemberId());
-        member.changeRefreshTokenHash(TokenHasher.sha256Hex(refreshToken));
+        String accessToken = jwtTokenProvider.createUserAccessToken(user.getUserId());
+        String refreshToken = jwtTokenProvider.createUserRefreshToken(user.getUserId());
+        user.changeRefreshTokenHash(TokenHasher.sha256Hex(refreshToken));
         return TokenResponse.of(accessToken, refreshToken, jwtTokenProvider.accessTokenExpiresInSeconds());
     }
 
@@ -105,13 +105,13 @@ public class MemberAuthService {
      */
     @Transactional
     public TokenResponse refresh(RefreshRequest request) {
-        Long memberId = jwtTokenProvider.parseMemberId(request.refreshToken(), TokenType.REFRESH);
+        Long userId = jwtTokenProvider.parseUserId(request.refreshToken(), TokenType.REFRESH);
 
-        String accessToken = jwtTokenProvider.createMemberAccessToken(memberId);
-        String newRefreshToken = jwtTokenProvider.createMemberRefreshToken(memberId);
+        String accessToken = jwtTokenProvider.createUserAccessToken(userId);
+        String newRefreshToken = jwtTokenProvider.createUserRefreshToken(userId);
 
-        int rotated = memberRepository.rotateRefreshTokenHash(
-                memberId,
+        int rotated = userRepository.rotateRefreshTokenHash(
+                userId,
                 TokenHasher.sha256Hex(request.refreshToken()),
                 TokenHasher.sha256Hex(newRefreshToken));
         if (rotated == 0) {
@@ -130,7 +130,7 @@ public class MemberAuthService {
      */
     @Transactional
     public void logout(LogoutRequest request) {
-        Long memberId = jwtTokenProvider.parseMemberId(request.refreshToken(), TokenType.REFRESH);
-        memberRepository.clearRefreshTokenHash(memberId, TokenHasher.sha256Hex(request.refreshToken()));
+        Long userId = jwtTokenProvider.parseUserId(request.refreshToken(), TokenType.REFRESH);
+        userRepository.clearRefreshTokenHash(userId, TokenHasher.sha256Hex(request.refreshToken()));
     }
 }

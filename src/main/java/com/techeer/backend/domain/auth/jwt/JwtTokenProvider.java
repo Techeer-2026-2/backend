@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>광고주와 음악 앱 회원은 같은 서명 키를 쓴다. 그래서 대상(aud)으로 구분하고, 검증할 때 대상이 맞는지 확인한다.
  * 대상 구분이 생기기 전에 발급된 광고주 토큰에는 aud 가 없다. 이 토큰들이 만료될 때까지 로그인이 풀리지 않도록,
- * aud 가 없는 토큰은 광고주용으로 본다. 회원 토큰은 aud 가 반드시 MEMBER 여야 한다.
+ * aud 가 없는 토큰은 광고주용으로 본다. 회원 토큰은 aud 가 반드시 USER 여야 한다.
  */
 @Component
 public class JwtTokenProvider {
@@ -66,13 +66,13 @@ public class JwtTokenProvider {
                 Duration.ofDays(properties.refreshTokenDays()));
     }
 
-    public String createMemberAccessToken(Long memberId) {
-        return create(memberId, TokenType.ACCESS, TokenAudience.MEMBER,
+    public String createUserAccessToken(Long userId) {
+        return create(userId, TokenType.ACCESS, TokenAudience.USER,
                 Duration.ofMinutes(properties.accessTokenMinutes()));
     }
 
-    public String createMemberRefreshToken(Long memberId) {
-        return create(memberId, TokenType.REFRESH, TokenAudience.MEMBER,
+    public String createUserRefreshToken(Long userId) {
+        return create(userId, TokenType.REFRESH, TokenAudience.USER,
                 Duration.ofDays(properties.refreshTokenDays()));
     }
 
@@ -100,8 +100,8 @@ public class JwtTokenProvider {
      *
      * @throws BusinessException 위조·만료·형식 오류·종류 불일치·대상 불일치 모두 같은 INVALID_TOKEN 으로 던진다
      */
-    public Long parseMemberId(String token, TokenType expectedType) {
-        return parseSubjectId(token, expectedType, TokenAudience.MEMBER);
+    public Long parseUserId(String token, TokenType expectedType) {
+        return parseSubjectId(token, expectedType, TokenAudience.USER);
     }
 
     private Long parseSubjectId(String token, TokenType expectedType, TokenAudience expectedAudience) {
