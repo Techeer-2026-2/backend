@@ -79,6 +79,22 @@ class PlaylistServiceTest {
     }
 
     @Test
+    void 총_재생시간은_곡_재생시간의_합이고_재생시간을_모르는_곡은_0초로_친다() {
+        Playlist playlist = Playlist.builder().memberId(1L).name("출근길").build();
+        addTrack(playlist, 1L, 240_500);
+        addTrack(playlist, 2L, 180_000);
+        addTrack(playlist, 3L, null);
+        when(playlistRepository.findById(1L)).thenReturn(Optional.of(playlist));
+        when(playlistRepository.findAllByMemberId(1L)).thenReturn(List.of(playlist));
+
+        PlaylistDetailResponse detail = playlistService.findDetail(1L, 1L);
+        List<PlaylistResponse> playlists = playlistService.findAll(1L);
+
+        assertThat(detail.totalDurationSec()).isEqualTo(420);
+        assertThat(playlists.get(0).totalDurationSec()).isEqualTo(420);
+    }
+
+    @Test
     void 처음_추가하는_곡은_track이_새로_생성된다() {
         Playlist playlist = Playlist.builder().memberId(1L).name("출근길").build();
         when(playlistRepository.findById(1L)).thenReturn(Optional.of(playlist));
@@ -225,5 +241,10 @@ class PlaylistServiceTest {
 
     private void setId(PlaylistTrack playlistTrack, Long id) {
         ReflectionTestUtils.setField(playlistTrack, "id", id);
+    }
+
+    private static void addTrack(Playlist playlist, Long itunesTrackId, Integer trackTimeMillis) {
+        Track track = Track.builder().itunesTrackId(itunesTrackId).trackTimeMillis(trackTimeMillis).build();
+        playlist.getTracks().add(PlaylistTrack.builder().playlist(playlist).track(track).build());
     }
 }

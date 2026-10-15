@@ -13,6 +13,7 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -56,5 +57,15 @@ public class Playlist extends BaseEntity {
         this.name = name;
         this.description = description;
         this.isPublic = isPublic;
+    }
+
+    /** 담긴 곡들의 재생시간 합계(초). 재생시간을 모르는 곡은 0초로 친다. */
+    public int calculateTotalDurationSec() {
+        long totalMillis = tracks.stream()
+                .map(playlistTrack -> playlistTrack.getTrack().getTrackTimeMillis())
+                .filter(Objects::nonNull)
+                .mapToLong(Integer::longValue)
+                .sum();
+        return (int) (totalMillis / 1000);
     }
 }

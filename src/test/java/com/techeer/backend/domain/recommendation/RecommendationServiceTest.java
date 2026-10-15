@@ -71,7 +71,7 @@ class RecommendationServiceTest {
     }
 
     private PlaylistDetailResponse emptyDetail() {
-        return new PlaylistDetailResponse(10L, "x", PlaylistType.COMMUTE_GENERATED, null, true, List.of());
+        return new PlaylistDetailResponse(10L, "x", PlaylistType.COMMUTE_GENERATED, null, true, 0, List.of());
     }
 
     @Test
