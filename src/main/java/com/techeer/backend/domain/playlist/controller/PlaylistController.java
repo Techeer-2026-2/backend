@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -62,7 +63,7 @@ public class PlaylistController {
     public void addTracks(
             @MemberId Long memberId,
             @PathVariable Long playlistId,
-            @RequestBody @NotNull List<@Valid PlaylistTrackAddRequest> requests) {
+            @RequestBody @NotNull @Size(max = 100) List<@Valid PlaylistTrackAddRequest> requests) {
         playlistService.addTracks(memberId, playlistId, requests);
     }
 
