@@ -12,6 +12,7 @@ public record PlaylistDetailResponse(
         PlaylistType type,
         String description,
         Boolean isPublic,
+        int totalDurationSec,
         List<PlaylistTrackResponse> tracks) {
 
     public static PlaylistDetailResponse from(Playlist playlist) {
@@ -21,6 +22,7 @@ public record PlaylistDetailResponse(
                 playlist.getType(),
                 playlist.getDescription(),
                 playlist.getIsPublic(),
+                playlist.calculateTotalDurationSec(),
                 playlist.getTracks().stream()
                         .sorted(Comparator.comparing(
                                 PlaylistTrack::getTrackOrder, Comparator.nullsLast(Comparator.naturalOrder())))

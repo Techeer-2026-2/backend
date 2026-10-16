@@ -12,9 +12,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.techeer.backend.domain.commuteprofile.entity.CommuteProfile;
+import com.techeer.backend.domain.commuteprofile.entity.CommuteRoute;
 import com.techeer.backend.domain.commuteprofile.entity.CommuteType;
 import com.techeer.backend.domain.commuteprofile.entity.Location;
 import com.techeer.backend.domain.commuteprofile.repository.CommuteProfileRepository;
+import com.techeer.backend.domain.commuteprofile.repository.CommuteRouteRepository;
 import com.techeer.backend.domain.playlist.dto.PlaylistDetailResponse;
 import com.techeer.backend.domain.playlist.entity.PlaylistType;
 import com.techeer.backend.domain.playlist.entity.Track;
@@ -23,6 +25,7 @@ import com.techeer.backend.domain.playlist.entity.TrackMoodScore;
 import com.techeer.backend.domain.playlist.entity.TrackMoodSource;
 import com.techeer.backend.domain.playlist.repository.TrackMoodScoreRepository;
 import com.techeer.backend.domain.playlist.service.PlaylistService;
+import com.techeer.backend.domain.playlist.service.RunningTimeAdjuster;
 import com.techeer.backend.domain.recommendation.dto.PlaylistGenerateRequest;
 import com.techeer.backend.domain.recommendation.dto.PlaylistGenerateResponse;
 import com.techeer.backend.domain.weather.WeatherCondition;
@@ -44,13 +47,15 @@ import org.springframework.test.util.ReflectionTestUtils;
 class RecommendationServiceTest {
 
     private final CommuteProfileRepository profiles = mock(CommuteProfileRepository.class);
+    private final CommuteRouteRepository routes = mock(CommuteRouteRepository.class);
     private final TrackMoodScoreRepository scores = mock(TrackMoodScoreRepository.class);
     private final PlaylistService playlistService = mock(PlaylistService.class);
     private final WeatherService weatherService = mock(WeatherService.class);
     // 한국 시간 18시 = 퇴근 러시
     private final Clock clock = Clock.fixed(Instant.parse("2026-10-16T09:00:00Z"), ZoneId.of("Asia/Seoul"));
     private final RecommendationService service = new RecommendationService(
-            profiles, scores, playlistService, weatherService, clock, RandomGenerator.of("L64X128MixRandom"));
+            profiles, routes, scores, playlistService, new RunningTimeAdjuster(), weatherService, clock,
+            RandomGenerator.of("L64X128MixRandom"));
 
     private CommuteProfile profile(long memberId, CommuteType type) {
         CommuteProfile p = CommuteProfile.builder()
@@ -61,9 +66,14 @@ class RecommendationServiceTest {
     }
 
     private List<TrackMoodScore> rainyPool(int count) {
+        return rainyPool(count, null);
+    }
+
+    private List<TrackMoodScore> rainyPool(int count, Integer trackTimeMillis) {
         List<TrackMoodScore> rows = new ArrayList<>();
         for (long i = 1; i <= count; i++) {
-            Track t = Track.builder().itunesTrackId(i).title("곡" + i).artist("가수" + i).build();
+            Track t = Track.builder().itunesTrackId(i).title("곡" + i).artist("가수" + i)
+                    .trackTimeMillis(trackTimeMillis).build();
             ReflectionTestUtils.setField(t, "id", i);
             rows.add(TrackMoodScore.create(t, TrackMood.GLOOMY, 0.9, TrackMoodSource.SCORED));
         }
@@ -71,7 +81,7 @@ class RecommendationServiceTest {
     }
 
     private PlaylistDetailResponse emptyDetail() {
-        return new PlaylistDetailResponse(10L, "x", PlaylistType.COMMUTE_GENERATED, null, true, List.of());
+        return new PlaylistDetailResponse(10L, "x", PlaylistType.COMMUTE_GENERATED, null, true, 0, List.of());
     }
 
     @Test
@@ -108,6 +118,53 @@ class RecommendationServiceTest {
         ArgumentCaptor<List<Long>> trackIds = ArgumentCaptor.captor();
         verify(playlistService).createGenerated(eq(7L), eq("내 이름"), trackIds.capture());
         assertThat(trackIds.getValue()).hasSize(5);
+    }
+
+    @Test
+    void 곡_수를_정하지_않으면_통근_소요시간에_맞춰_곡_수를_정한다() {
+        stubRainyProfileWithRoute(30);
+        when(scores.findCandidates(any(), anyDouble())).thenReturn(rainyPool(40, 180_000));
+
+        service.generate(7L, new PlaylistGenerateRequest(1L, null, null));
+
+        // 3분 곡 10개 = 30분
+        ArgumentCaptor<List<Long>> trackIds = ArgumentCaptor.captor();
+        verify(playlistService).createGenerated(eq(7L), any(), trackIds.capture());
+        assertThat(trackIds.getValue()).hasSize(10).doesNotHaveDuplicates();
+    }
+
+    @Test
+    void 곡_수를_정하면_통근_소요시간보다_곡_수가_우선이다() {
+        stubRainyProfileWithRoute(30);
+        when(scores.findCandidates(any(), anyDouble())).thenReturn(rainyPool(40, 180_000));
+
+        service.generate(7L, new PlaylistGenerateRequest(1L, null, 4));
+
+        ArgumentCaptor<List<Long>> trackIds = ArgumentCaptor.captor();
+        verify(playlistService).createGenerated(eq(7L), any(), trackIds.capture());
+        assertThat(trackIds.getValue()).hasSize(4);
+    }
+
+    @Test
+    void 재생시간을_아는_곡이_없으면_기본_곡_수로_만든다() {
+        stubRainyProfileWithRoute(30);
+        when(scores.findCandidates(any(), anyDouble())).thenReturn(rainyPool(40));
+
+        service.generate(7L, new PlaylistGenerateRequest(1L, null, null));
+
+        ArgumentCaptor<List<Long>> trackIds = ArgumentCaptor.captor();
+        verify(playlistService).createGenerated(eq(7L), any(), trackIds.capture());
+        assertThat(trackIds.getValue()).hasSize(RecommendationService.DEFAULT_SIZE);
+    }
+
+    private void stubRainyProfileWithRoute(int averageDurationMinutes) {
+        CommuteProfile profile = profile(7L, CommuteType.TO_WORK);
+        when(profiles.findById(1L)).thenReturn(Optional.of(profile));
+        when(routes.findByCommuteProfileId(1L)).thenReturn(Optional.of(CommuteRoute.builder()
+                .commuteProfile(profile).averageDurationMinutes(averageDurationMinutes).build()));
+        when(weatherService.getCurrentSnapshot(anyDouble(), anyDouble()))
+                .thenReturn(new WeatherSnapshot(WeatherCondition.RAINY, 12.0, false, false));
+        when(playlistService.createGenerated(any(), any(), anyList())).thenReturn(emptyDetail());
     }
 
     @Test

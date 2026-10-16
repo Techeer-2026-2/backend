@@ -11,12 +11,13 @@ import com.techeer.backend.domain.weather.WeatherSnapshot;
 import java.util.List;
 
 /**
- * 만들어진 플레이리스트(id·name·type·tracks, 플레이리스트 상세 조회와 같은 모양)와, 어떤 상황을 보고 만들었는지(context).
+ * 만들어진 플레이리스트(id·name·type·totalDurationSec·tracks, 플레이리스트 상세 조회와 같은 모양)와, 어떤 상황을 보고 만들었는지(context).
  * 프론트가 {@code result.id}, {@code result.name} 으로 바로 읽도록 한 겹으로 펼쳐 둔다.
  * 프론트는 context 로 "맑음 22°C · 출근길" 같은 문구를 보여줄 수 있다.
  */
 public record PlaylistGenerateResponse(
-        Long id, String name, PlaylistType type, List<PlaylistTrackResponse> tracks, Context context) {
+        Long id, String name, PlaylistType type, int totalDurationSec, List<PlaylistTrackResponse> tracks,
+        Context context) {
 
     /** @param weather 날씨 조회에 실패했으면 null */
     public record Context(Weather weather, TimeBand timeBand, CommuteType commuteType, List<String> moods) {
@@ -30,7 +31,8 @@ public record PlaylistGenerateResponse(
         WeatherSnapshot w = context.weather();
         Weather weather = w == null ? null : new Weather(w.condition(),
                 w.temperatureCelsius() == null ? null : (int) Math.round(w.temperatureCelsius()), w.hazy(), w.stormy());
-        return new PlaylistGenerateResponse(playlist.id(), playlist.name(), playlist.type(), playlist.tracks(),
+        return new PlaylistGenerateResponse(playlist.id(), playlist.name(), playlist.type(),
+                playlist.totalDurationSec(), playlist.tracks(),
                 new Context(weather, context.timeBand(), context.commuteType(), topMoods));
     }
 }

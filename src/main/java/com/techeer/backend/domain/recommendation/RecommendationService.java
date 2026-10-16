@@ -1,14 +1,17 @@
 package com.techeer.backend.domain.recommendation;
 
 import com.techeer.backend.domain.commuteprofile.entity.CommuteProfile;
+import com.techeer.backend.domain.commuteprofile.entity.CommuteRoute;
 import com.techeer.backend.domain.commuteprofile.entity.Location;
 import com.techeer.backend.domain.commuteprofile.repository.CommuteProfileRepository;
+import com.techeer.backend.domain.commuteprofile.repository.CommuteRouteRepository;
 import com.techeer.backend.domain.playlist.dto.PlaylistDetailResponse;
 import com.techeer.backend.domain.playlist.entity.Track;
 import com.techeer.backend.domain.playlist.entity.TrackMood;
 import com.techeer.backend.domain.playlist.entity.TrackMoodScore;
 import com.techeer.backend.domain.playlist.repository.TrackMoodScoreRepository;
 import com.techeer.backend.domain.playlist.service.PlaylistService;
+import com.techeer.backend.domain.playlist.service.RunningTimeAdjuster;
 import com.techeer.backend.domain.recommendation.PlaylistRecommender.Candidate;
 import com.techeer.backend.domain.recommendation.dto.PlaylistGenerateRequest;
 import com.techeer.backend.domain.recommendation.dto.PlaylistGenerateResponse;
@@ -23,6 +26,7 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalDouble;
 import java.util.random.RandomGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,10 +47,14 @@ public class RecommendationService {
     /** 이 점수 미만의 분위기 태그는 후보에서 뺀다 */
     static final double MIN_MOOD_SCORE = 0.2;
     private static final int TOP_MOODS_IN_RESPONSE = 3;
+    /** 러닝타임 맞춤에서 어림한 곡 수보다 더 뽑아 두는 곡 수. 긴 곡을 건너뛰고 짧은 곡으로 채울 여유 */
+    static final int RUNNING_TIME_POOL_SLACK = 5;
 
     private final CommuteProfileRepository commuteProfileRepository;
+    private final CommuteRouteRepository commuteRouteRepository;
     private final TrackMoodScoreRepository moodScoreRepository;
     private final PlaylistService playlistService;
+    private final RunningTimeAdjuster runningTimeAdjuster;
     private final WeatherService weatherService;
     private final Clock clock;
     private final RandomGenerator random;
@@ -63,8 +71,10 @@ public class RecommendationService {
         Map<TrackMood, Double> weights = MoodRules.weights(context);
 
         List<Candidate> candidates = loadCandidates(weights);
-        int size = request.size() == null ? DEFAULT_SIZE : request.size();
-        List<Track> selected = PlaylistRecommender.select(candidates, weights, size, random);
+        Integer targetMinutes = request.size() == null ? commuteMinutesOrNull(profile) : null;
+        List<Track> selected = targetMinutes == null
+                ? PlaylistRecommender.select(candidates, weights, sizeOrDefault(request), random)
+                : selectForRunningTime(candidates, weights, targetMinutes);
         if (selected.isEmpty()) {
             throw new BusinessException(ErrorCode.PLAYLIST_GENERATE_NO_CANDIDATES);
         }
@@ -73,6 +83,41 @@ public class RecommendationService {
         PlaylistDetailResponse playlist = playlistService.createGenerated(
                 memberId, name, selected.stream().map(Track::getId).toList());
         return PlaylistGenerateResponse.of(playlist, context, topMoods(weights));
+    }
+
+    private static int sizeOrDefault(PlaylistGenerateRequest request) {
+        return request.size() == null ? DEFAULT_SIZE : request.size();
+    }
+
+    /** 곡 수를 직접 정하지 않았을 때만 쓴다. 경로가 없거나 소요시간을 모르면 null (기본 곡 수로 만든다). */
+    private Integer commuteMinutesOrNull(CommuteProfile profile) {
+        return commuteRouteRepository.findByCommuteProfileId(profile.getId())
+                .map(CommuteRoute::getAverageDurationMinutes)
+                .filter(minutes -> minutes > 0)
+                .orElse(null);
+    }
+
+    /**
+     * 통근 소요시간에 맞춰 곡을 고른다 (#90). 필요한 곡 수를 평균 재생시간으로 어림해 그보다 조금 넉넉하게 뽑고,
+     * {@link RunningTimeAdjuster} 가 그 순서대로 시간을 맞춘다. 넉넉하게 뽑는 양을 작게 두는 것은
+     * 가수·장르 제한이 실제로 담기는 곡 수 기준으로 걸리게 하려는 것이다.
+     * 재생시간을 아는 후보가 없어 시간을 못 맞추면 기본 곡 수로 만든다.
+     */
+    private List<Track> selectForRunningTime(List<Candidate> candidates, Map<TrackMood, Double> weights,
+            int targetMinutes) {
+        OptionalDouble averageMillis = candidates.stream()
+                .map(c -> c.track().getTrackTimeMillis())
+                .filter(millis -> millis != null && millis > 0)
+                .mapToInt(Integer::intValue)
+                .average();
+        if (averageMillis.isEmpty()) {
+            return PlaylistRecommender.select(candidates, weights, DEFAULT_SIZE, random);
+        }
+        int estimated = (int) Math.ceil(targetMinutes * 60_000.0 / averageMillis.getAsDouble());
+        int poolSize = Math.min(estimated + RUNNING_TIME_POOL_SLACK, RunningTimeAdjuster.MAX_TRACKS);
+        List<Track> fitted = runningTimeAdjuster.fit(
+                PlaylistRecommender.select(candidates, weights, poolSize, random), targetMinutes);
+        return fitted.isEmpty() ? PlaylistRecommender.select(candidates, weights, DEFAULT_SIZE, random) : fitted;
     }
 
     /** 날씨를 못 가져와도 추천은 한다 (시간대와 통근 구분만으로). */
