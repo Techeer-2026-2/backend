@@ -118,7 +118,8 @@ public class PlaylistService {
                 .collect(Collectors.toMap(PlaylistTrack::getId, Function.identity()));
 
         List<Long> orderedIds = request.playlistTrackIds();
-        if (orderedIds.size() != tracksById.size()) {
+        long distinctCount = orderedIds.stream().distinct().count();
+        if (orderedIds.size() != tracksById.size() || distinctCount != orderedIds.size()) {
             throw new BusinessException(ErrorCode.PLAYLIST_TRACK_NOT_FOUND);
         }
 

@@ -182,6 +182,26 @@ class PlaylistServiceTest {
     }
 
     @Test
+    void 곡_순서_변경시_중복된_ID가_있으면_PLAYLIST_TRACK_NOT_FOUND_예외() {
+        Playlist playlist = Playlist.builder().memberId(1L).name("출근길").build();
+        Track track1 = Track.builder().itunesTrackId(1L).title("A").build();
+        Track track2 = Track.builder().itunesTrackId(2L).title("B").build();
+        PlaylistTrack playlistTrack1 = PlaylistTrack.builder().playlist(playlist).track(track1).build();
+        PlaylistTrack playlistTrack2 = PlaylistTrack.builder().playlist(playlist).track(track2).build();
+        setId(playlistTrack1, 10L);
+        setId(playlistTrack2, 20L);
+        playlist.getTracks().add(playlistTrack1);
+        playlist.getTracks().add(playlistTrack2);
+        when(playlistRepository.findById(1L)).thenReturn(Optional.of(playlist));
+
+        BusinessException exception = catchThrowableOfType(
+                BusinessException.class,
+                () -> playlistService.updateTrackOrder(1L, 1L, new TrackOrderUpdateRequest(List.of(10L, 10L))));
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PLAYLIST_TRACK_NOT_FOUND);
+    }
+
+    @Test
     void 존재하지_않는_트랙_삭제시_PLAYLIST_TRACK_NOT_FOUND_예외() {
         Playlist playlist = Playlist.builder().memberId(1L).name("출근길").build();
         when(playlistRepository.findById(1L)).thenReturn(Optional.of(playlist));
