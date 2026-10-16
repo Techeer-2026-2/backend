@@ -33,22 +33,29 @@ public class RankingDemoData implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         String[] titles = {"첫차의 리듬", "창가에 앉아", "도시의 아침", "한 정거장 더", "이어폰 속 산책", "집으로 가는 길"};
         String[] artists = {"Morning Club", "유리창", "Seoul Tape", "Platform 2", "느린 걸음", "Night Bus"};
-        int[] listeners = {24, 19, 12, 8, 5, 3};
+        int[] currentListeners = {24, 23, 22, 21, 20, 20};
+        int[] previousListeners = {20, 22, 23, 24, 20, 20};
         Instant hour = clock.instant().truncatedTo(ChronoUnit.HOURS).minus(1, ChronoUnit.HOURS);
         for (int track = 0; track < titles.length; track++) {
             String trackId = "demo-" + track;
             playback.saveTrack(trackId, new TrackInput(titles[track], artists[track], null, null));
-            for (int user = 1; user <= listeners[track]; user++) {
-                String key = hour + ":" + track + ":" + user;
-                Instant startedAt = hour.plusSeconds(60 + track * 400L + user);
-                UUID sessionId = id("session:" + key);
-                playback.start(new StartRequest(sessionId, 9_000_000L + user, trackId, startedAt,
-                        user <= 20 ? new LocationInput(37.5442, 127.0561, 10.0, startedAt) : null));
-                playback.record(new EventRequest(id("event:" + key), sessionId, EventType.TRACK_COMPLETED,
-                        1.0, startedAt.plusSeconds(180)));
-            }
+            seedHour(hour.minus(1, ChronoUnit.HOURS), track, trackId, previousListeners[track]);
+            seedHour(hour, track, trackId, currentListeners[track]);
         }
+        batch.rebuild(hour.minus(1, ChronoUnit.HOURS));
         batch.rebuild(hour);
+    }
+
+    private void seedHour(Instant hour, int track, String trackId, int listeners) {
+        for (int user = 1; user <= listeners; user++) {
+            String key = hour + ":" + track + ":" + user;
+            Instant startedAt = hour.plusSeconds(60 + track * 400L + user);
+            UUID sessionId = id("session:" + key);
+            playback.start(new StartRequest(sessionId, 9_000_000L + user, trackId, startedAt,
+                    user <= 20 ? new LocationInput(37.5442, 127.0561, 10.0, startedAt) : null));
+            playback.record(new EventRequest(id("event:" + key), sessionId, EventType.TRACK_COMPLETED,
+                    1.0, startedAt.plusSeconds(180)));
+        }
     }
 
     private UUID id(String input) {

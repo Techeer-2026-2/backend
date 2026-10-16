@@ -238,6 +238,32 @@ class RankingIntegrationTest {
     }
 
     @Test
+    void globalChartShowsTopHundredWithPreviousHourRankChange() {
+        playback.saveTrack("C", new TrackInput("새 곡", "테스트 아티스트", null, null));
+        Instant previousHour = HOUR.minusSeconds(3600);
+        for (int user = 1; user <= 22; user++) {
+            complete(user, "A", previousHour, null);
+            complete(user, "B", HOUR, null);
+            if (user <= 20) {
+                complete(user, "B", previousHour, null);
+                complete(user, "A", HOUR, null);
+                complete(user, "C", HOUR, null);
+            }
+        }
+        batch.rebuild(previousHour);
+        batch.rebuild(HOUR);
+
+        var items = query.global(100).items();
+        assertThat(items).hasSize(3);
+        assertThat(items.get(0).track().id()).isEqualTo("B");
+        assertThat(items.get(0).rankChange()).isEqualTo(1);
+        assertThat(items.get(1).track().id()).isEqualTo("A");
+        assertThat(items.get(1).rankChange()).isEqualTo(-1);
+        assertThat(items.get(2).track().id()).isEqualTo("C");
+        assertThat(items.get(2).rankChange()).isNull();
+    }
+
+    @Test
     void parentFallbackUsesSavedParentChart() throws Exception {
         String queryCell = geo.cell(37.5442, 127.0561);
         H3Core h3 = H3Core.newInstance();
@@ -330,7 +356,10 @@ class RankingIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.items.length()").value(1))
                 .andExpect(jsonPath("$.data.items[0].uniqueListenerCount").value(20))
                 .andExpect(jsonPath("$.data.fallbackApplied").value(true));
-        mvc.perform(get("/api/v1/rankings/tracks/global?limit=21")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/rankings/tracks/global?limit=100")).andExpect(status().isOk());
+        mvc.perform(get("/api/v1/rankings/tracks/global?limit=101")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/rankings/tracks/nearby?lat=37&lng=127&limit=21"))
+                .andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/rankings/tracks/nearby?lat=NaN&lng=127")).andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/rankings/tracks/nearby?lat=37")).andExpect(status().isBadRequest());
     }

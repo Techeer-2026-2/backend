@@ -26,8 +26,9 @@ public class RankingController {
     }
 
     @GetMapping("/global")
-    @Operation(summary = "최근 완료된 시간 배치의 전체 차트 조회")
-    public Data<ChartResponse> global(@RequestParam(defaultValue = "20") int limit) {
+    @Operation(summary = "최근 완료된 시간 배치의 전체 Top 100 차트 조회",
+            description = "곡별 고유 완주 청취자 20명 이상만 표시하며 직전 시간 대비 순위 변화를 함께 반환합니다.")
+    public Data<ChartResponse> global(@RequestParam(defaultValue = "100") int limit) {
         return new Data<>(service.global(limit));
     }
 }

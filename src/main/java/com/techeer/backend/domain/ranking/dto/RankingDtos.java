@@ -63,7 +63,7 @@ public final class RankingDtos {
     public record EventResult(UUID eventId, boolean created, boolean counted, String locationStatus) {
     }
 
-    public record Item(int rank, long uniqueListenerCount, Track track) {
+    public record Item(int rank, long uniqueListenerCount, Integer rankChange, Track track) {
     }
 
     public record ChartResponse(String locationLabel, OffsetDateTime rankedHour, OffsetDateTime updatedAt,

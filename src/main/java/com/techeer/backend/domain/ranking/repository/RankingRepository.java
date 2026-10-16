@@ -146,18 +146,29 @@ public class RankingRepository {
         return jdbc.query("""
                 SELECT location_label FROM ranking.hourly_chart c WHERE ranked_hour = ? AND scope_key = ?
                     AND listener_count >= 20 AND EXISTS (SELECT 1 FROM ranking.hourly_track_rank r
-                        WHERE r.ranked_hour = c.ranked_hour AND r.scope_key = c.scope_key)
+                        WHERE r.ranked_hour = c.ranked_hour AND r.scope_key = c.scope_key
+                            AND (c.scope_key <> 'GLOBAL' OR r.unique_listener_count >= 20))
                 """, (rs, row) -> rs.getString(1), ts(hour), key).stream().findFirst();
     }
 
     public List<Item> items(Instant hour, String key, int limit) {
         return jdbc.query("""
-                SELECT r.rank, r.unique_listener_count, t.* FROM ranking.hourly_track_rank r
+                SELECT r.rank, r.unique_listener_count, t.*,
+                    previous.rank - r.rank AS rank_change
+                FROM ranking.hourly_track_rank r
                 JOIN ranking.track t ON t.track_id = r.track_id
-                WHERE ranked_hour = ? AND scope_key = ? ORDER BY r.rank LIMIT ?
+                LEFT JOIN ranking.hourly_track_rank previous
+                    ON previous.ranked_hour = ?
+                    AND previous.scope_key = r.scope_key AND previous.track_id = r.track_id
+                    AND (r.scope_key <> 'GLOBAL' OR previous.unique_listener_count >= 20)
+                WHERE r.ranked_hour = ? AND r.scope_key = ?
+                    AND (r.scope_key <> 'GLOBAL' OR r.unique_listener_count >= 20)
+                ORDER BY r.rank LIMIT ?
                 """, (rs, row) -> new Item(rs.getInt("rank"), rs.getLong("unique_listener_count"),
+                rs.getObject("rank_change", Integer.class),
                 new Track(rs.getString("track_id"), rs.getString("title"), rs.getString("artist_name"),
-                        rs.getString("preview_url"), rs.getString("external_url"))), ts(hour), key, limit);
+                        rs.getString("preview_url"), rs.getString("external_url"))),
+                ts(hour.minusSeconds(3600)), ts(hour), key, limit);
     }
 
     public void recordAttempt(Instant hour, Instant finishedAt, String status, long durationMs, String errorType) {

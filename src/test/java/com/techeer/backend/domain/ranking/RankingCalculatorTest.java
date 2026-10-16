@@ -42,6 +42,11 @@ class RankingCalculatorTest {
         assertThat(chart(calculator.calculate(events), "GLOBAL").scores()).extracting(score -> score.trackId())
                 .containsExactly("A");
         events.add(play(3, "hidden", cell, at));
+        assertThat(chart(calculator.calculate(events), "GLOBAL").scores()).hasSize(1);
+        assertThat(chart(calculator.calculate(events), "NEARBY:" + cell).scores()).hasSize(2);
+        for (int user = 4; user <= 20; user++) {
+            events.add(play(user, "hidden", cell, at));
+        }
         assertThat(chart(calculator.calculate(events), "GLOBAL").scores()).hasSize(2);
     }
 
@@ -54,18 +59,27 @@ class RankingCalculatorTest {
             }
         }
         events.add(play(1, "repeat", cell, at));
-        assertThat(chart(calculator.calculate(events), "GLOBAL").scores()).extracting(score -> score.trackId())
+        assertThat(chart(calculator.calculate(events), "NEARBY:" + cell).scores()).extracting(score -> score.trackId())
                 .containsExactly("winner", "repeat", "recent", "a", "b");
     }
 
     @Test
-    void storesTopTwentyOnlyAfterFiltering() {
+    void storesGlobalTopHundredAndNearbyTopTwenty() {
         List<Completion> events = new ArrayList<>();
-        for (int i = 0; i < 25; i++) {
-            events.addAll(audience(20, "track-%02d".formatted(i), cell));
+        for (int i = 0; i < 105; i++) {
+            events.addAll(audience(20, "track-%03d".formatted(i), null));
         }
-        assertThat(chart(calculator.calculate(events), "GLOBAL").scores()).hasSize(20);
-        assertThat(chart(calculator.calculate(events), "GLOBAL").scores().getLast().trackId()).isEqualTo("track-19");
+        Chart global = chart(calculator.calculate(events), "GLOBAL");
+        assertThat(global.scores()).hasSize(100);
+        assertThat(global.scores().getLast().trackId()).isEqualTo("track-099");
+
+        List<Completion> nearbyEvents = new ArrayList<>();
+        for (int i = 0; i < 25; i++) {
+            nearbyEvents.addAll(audience(20, "track-%03d".formatted(i), cell));
+        }
+        Chart nearby = chart(calculator.calculate(nearbyEvents), "NEARBY:" + cell);
+        assertThat(nearby.scores()).hasSize(20);
+        assertThat(nearby.scores().getLast().trackId()).isEqualTo("track-019");
     }
 
     @Test
