@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Size;
 /**
  * @param commuteProfileId 어떤 통근 프로필 기준으로 만들지 (출발지 날씨와 출근/퇴근 구분에 쓴다)
  * @param name 플레이리스트 이름. 없으면 상황에 맞춰 자동으로 짓는다
- * @param size 곡 수. 없으면 15곡
+ * @param size 곡 수. 없으면 통근 경로 소요시간에 맞춰 곡 수를 정하고, 소요시간을 모르면 15곡
  */
 public record PlaylistGenerateRequest(
         @NotNull Long commuteProfileId,

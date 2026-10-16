@@ -1,6 +1,6 @@
 package com.techeer.backend.domain.playlist.service;
 
-import com.techeer.backend.domain.music.dto.TrackCandidateResponse;
+import com.techeer.backend.domain.playlist.entity.Track;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -19,28 +19,28 @@ import org.springframework.stereotype.Component;
 public class RunningTimeAdjuster {
 
     /** 플레이리스트 곡 추가 API 의 최대 곡 수(#56)와 맞춘다. */
-    static final int MAX_TRACKS = 100;
+    public static final int MAX_TRACKS = 100;
 
-    public List<TrackCandidateResponse> fit(List<TrackCandidateResponse> candidates, int targetMinutes) {
+    public List<Track> fit(List<Track> candidates, int targetMinutes) {
         long targetMillis = targetMinutes * 60_000L;
-        List<TrackCandidateResponse> selected = new ArrayList<>();
+        List<Track> selected = new ArrayList<>();
         if (targetMillis <= 0) {
             return selected;
         }
 
-        List<TrackCandidateResponse> skipped = new ArrayList<>();
+        List<Track> skipped = new ArrayList<>();
         Set<Long> seenTrackIds = new HashSet<>();
         long totalMillis = 0;
-        for (TrackCandidateResponse candidate : candidates) {
+        for (Track candidate : candidates) {
             if (selected.size() == MAX_TRACKS) {
                 return selected;
             }
-            if (!isUsable(candidate) || !seenTrackIds.add(candidate.itunesTrackId())) {
+            if (!isUsable(candidate) || !seenTrackIds.add(candidate.getItunesTrackId())) {
                 continue;
             }
-            if (totalMillis + candidate.trackTimeMillis() <= targetMillis) {
+            if (totalMillis + candidate.getTrackTimeMillis() <= targetMillis) {
                 selected.add(candidate);
-                totalMillis += candidate.trackTimeMillis();
+                totalMillis += candidate.getTrackTimeMillis();
             } else {
                 skipped.add(candidate);
             }
@@ -58,14 +58,14 @@ public class RunningTimeAdjuster {
     }
 
     /** 곡 ID 가 없으면 플레이리스트에 담을 수 없고, 재생시간을 모르면 시간을 맞출 수 없다. */
-    private static boolean isUsable(TrackCandidateResponse candidate) {
-        return candidate.itunesTrackId() != null
-                && candidate.trackTimeMillis() != null
-                && candidate.trackTimeMillis() > 0;
+    private static boolean isUsable(Track candidate) {
+        return candidate.getItunesTrackId() != null
+                && candidate.getTrackTimeMillis() != null
+                && candidate.getTrackTimeMillis() > 0;
     }
 
     /** 공백을 채우고 남는(넘치는) 시간. skipped 곡은 모두 공백보다 길어서 항상 0 이상이다. */
-    private static long overshoot(TrackCandidateResponse candidate, long gapMillis) {
-        return candidate.trackTimeMillis() - gapMillis;
+    private static long overshoot(Track candidate, long gapMillis) {
+        return candidate.getTrackTimeMillis() - gapMillis;
     }
 }
