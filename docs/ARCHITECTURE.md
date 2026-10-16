@@ -186,6 +186,7 @@ CREATE TABLE playlist (  -- 사용자 직접 생성(USER_CREATED) 또는 서버 
     is_public BOOLEAN DEFAULT TRUE,
     total_duration_sec INT,
     type VARCHAR(20) NOT NULL DEFAULT 'USER_CREATED',  -- USER_CREATED | COMMUTE_GENERATED
+    share_token VARCHAR(36) UNIQUE,  -- 공유 링크 토큰. 공유 중일 때만 값이 있다
     created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
 );
 
@@ -237,6 +238,14 @@ CREATE TABLE now_playing (  -- 현재 재생 중인 곡 (공유/조회 기능용
     track_id BIGINT REFERENCES track(track_id),
     is_public BOOLEAN DEFAULT TRUE,
     updated_at TIMESTAMP
+);
+
+CREATE TABLE playlist_active_listening (  -- 공유 플레이리스트를 지금 듣는 회원과 위치 셀. 회원당 1행, 재생 신호가 끊기면 정리 작업이 삭제
+    member_id BIGINT PRIMARY KEY,
+    playlist_id BIGINT NOT NULL,
+    h3_cell VARCHAR(15) NOT NULL,  -- H3 해상도 8
+    location_recorded_at TIMESTAMPTZ NOT NULL,
+    heartbeat_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE playback_event (  -- 재생 이벤트(PLAY/SKIP/REPEAT). 주변 인기곡 집계(popular_track_ranking)의 원본
