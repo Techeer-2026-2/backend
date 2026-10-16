@@ -17,6 +17,8 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Getter
 @Entity
@@ -39,6 +41,12 @@ public class CommuteRoute extends BaseEntity {
     @Column(nullable = false)
     private Integer averageDurationMinutes;
 
+    /**
+     * TMAP 경로 상세(JSON 문자열). 칼럼이 jsonb 라서 {@code @JdbcTypeCode(SqlTypes.JSON)} 이 필요하다.
+     * 없으면 Hibernate 가 문자열(varchar)로 바인딩해 PostgreSQL 이 "jsonb 칼럼에 varchar 를 넣을 수 없다"며 거절한다
+     * (값이 null 이어도 마찬가지라, 통근 프로필 저장이 전부 실패했다).
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String routeDetail;
 
