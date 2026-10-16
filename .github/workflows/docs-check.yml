@@ -1,0 +1,31 @@
+name: 작업 기록 점검
+
+# docs/context 기록의 형식(본문 30줄, 필수 항목, INDEX 등록, 키·비밀번호 문자열)을 검사한다.
+# 기록이나 점검 스크립트가 바뀐 PR 에서만 돈다. 검사 규칙은 docs/context/README.md.
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'docs/context/**'
+      - 'AGENTS.md'
+      - 'scripts/check-docs*.sh'
+      - '.github/workflows/docs-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-docs:
+    name: 작업 기록 점검
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 소스 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 점검 스크립트 자체 테스트
+        run: bash scripts/check-docs.test.sh
+
+      - name: 기록 점검
+        run: bash scripts/check-docs.sh
