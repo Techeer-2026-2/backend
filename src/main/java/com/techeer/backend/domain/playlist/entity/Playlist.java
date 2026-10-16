@@ -32,6 +32,10 @@ public class Playlist extends BaseEntity {
 
     private String name;
 
+    private String description;
+
+    private Boolean isPublic;
+
     /** 기존 행(이 칼럼이 생기기 전)은 직접 만든 것으로 본다. 운영 DB 에는 DEFAULT 'USER_CREATED' 로 칼럼을 추가한다. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20, columnDefinition = "varchar(20) default 'USER_CREATED'")
@@ -41,9 +45,16 @@ public class Playlist extends BaseEntity {
     private List<PlaylistTrack> tracks = new ArrayList<>();
 
     @Builder
-    private Playlist(Long memberId, String name, PlaylistType type) {
+    private Playlist(Long memberId, String name, Boolean isPublic, PlaylistType type) {
         this.memberId = memberId;
         this.name = name;
+        this.isPublic = isPublic != null ? isPublic : true;
         this.type = type == null ? PlaylistType.USER_CREATED : type;
+    }
+
+    public void update(String name, String description, Boolean isPublic) {
+        this.name = name;
+        this.description = description;
+        this.isPublic = isPublic;
     }
 }

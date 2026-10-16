@@ -14,6 +14,7 @@ import com.techeer.backend.domain.commuteprofile.entity.CommuteProfile;
 import com.techeer.backend.domain.commuteprofile.entity.CommuteType;
 import com.techeer.backend.domain.commuteprofile.entity.Location;
 import com.techeer.backend.domain.commuteprofile.repository.CommuteProfileRepository;
+import com.techeer.backend.domain.playlist.entity.PlaylistTrack;
 import com.techeer.backend.domain.playlist.entity.Track;
 import com.techeer.backend.domain.playlist.entity.TrackMood;
 import com.techeer.backend.domain.playlist.entity.TrackMoodScore;
@@ -29,6 +30,8 @@ import com.techeer.backend.global.exception.ErrorCode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +45,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /** 요청 → 통근 프로필 → 날씨 → 후보 곡(DB) → 플레이리스트 저장 → 응답까지 실제 PostgreSQL 로 확인한다. 날씨만 가짜로 둔다. */
 @SpringBootTest
@@ -56,6 +61,7 @@ class PlaylistGenerateIntegrationTest {
     @Autowired TrackRepository trackRepository;
     @Autowired TrackMoodScoreRepository moodScoreRepository;
     @Autowired PlaylistRepository playlistRepository;
+    @Autowired PlatformTransactionManager transactionManager;
 
     @MockitoBean WeatherService weatherService;
 
@@ -123,10 +129,22 @@ class PlaylistGenerateIntegrationTest {
         }
         long playlistId = root.get("id").asLong();
 
-        mockMvc.perform(get("/api/v1/playlists/" + playlistId).header("X-Member-Id", "1"))
+        String detail = mockMvc.perform(get("/api/v1/playlists/" + playlistId).header("X-Member-Id", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.type").value("COMMUTE_GENERATED"))
-                .andExpect(jsonPath("$.tracks.length()").value(8));
+                .andExpect(jsonPath("$.tracks.length()").value(8))
+                .andReturn().getResponse().getContentAsString();
+
+        // 추천이 고른 순서가 곡 순서(trackOrder 0..7)로 저장되고, 조회해도 같은 순서로 나온다.
+        List<Integer> orders = new TransactionTemplate(transactionManager).execute(status ->
+                playlistRepository.findById(playlistId).orElseThrow().getTracks().stream()
+                        .map(PlaylistTrack::getTrackOrder).sorted().toList());
+        org.assertj.core.api.Assertions.assertThat(orders).containsExactly(0, 1, 2, 3, 4, 5, 6, 7);
+        List<String> generatedNames = new ArrayList<>();
+        root.get("tracks").forEach(t -> generatedNames.add(t.get("trackName").asText()));
+        List<String> detailNames = new ArrayList<>();
+        objectMapper.readTree(detail).get("tracks").forEach(t -> detailNames.add(t.get("trackName").asText()));
+        org.assertj.core.api.Assertions.assertThat(detailNames).isEqualTo(generatedNames);
         mockMvc.perform(get("/api/v1/playlists").header("X-Member-Id", "1"))
                 .andExpect(jsonPath("$[0].type").value("COMMUTE_GENERATED"));
     }

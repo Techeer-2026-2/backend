@@ -4,6 +4,8 @@ import com.techeer.backend.domain.playlist.dto.PlaylistCreateRequest;
 import com.techeer.backend.domain.playlist.dto.PlaylistDetailResponse;
 import com.techeer.backend.domain.playlist.dto.PlaylistResponse;
 import com.techeer.backend.domain.playlist.dto.PlaylistTrackAddRequest;
+import com.techeer.backend.domain.playlist.dto.PlaylistUpdateRequest;
+import com.techeer.backend.domain.playlist.dto.TrackOrderUpdateRequest;
 import com.techeer.backend.domain.playlist.service.PlaylistService;
 import com.techeer.backend.domain.recommendation.RecommendationService;
 import com.techeer.backend.domain.recommendation.dto.PlaylistGenerateRequest;
@@ -19,8 +21,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -63,6 +67,15 @@ public class PlaylistController {
         return playlistService.findDetail(memberId, playlistId);
     }
 
+    @Operation(summary = "플레이리스트 정보 수정")
+    @PatchMapping("/{playlistId}")
+    public PlaylistResponse update(
+            @MemberId Long memberId,
+            @PathVariable Long playlistId,
+            @Valid @RequestBody PlaylistUpdateRequest request) {
+        return playlistService.update(memberId, playlistId, request);
+    }
+
     @Operation(summary = "플레이리스트 삭제")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @DeleteMapping("/{playlistId}")
@@ -78,6 +91,16 @@ public class PlaylistController {
             @PathVariable Long playlistId,
             @RequestBody @NotNull @Size(max = 100) List<@Valid PlaylistTrackAddRequest> requests) {
         playlistService.addTracks(memberId, playlistId, requests);
+    }
+
+    @Operation(summary = "플레이리스트 곡 순서 변경")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PutMapping("/{playlistId}/tracks/order")
+    public void updateTrackOrder(
+            @MemberId Long memberId,
+            @PathVariable Long playlistId,
+            @Valid @RequestBody TrackOrderUpdateRequest request) {
+        playlistService.updateTrackOrder(memberId, playlistId, request);
     }
 
     @Operation(summary = "플레이리스트에서 곡 삭제")

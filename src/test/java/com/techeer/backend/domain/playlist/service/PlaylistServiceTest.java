@@ -12,7 +12,10 @@ import com.techeer.backend.domain.playlist.dto.PlaylistCreateRequest;
 import com.techeer.backend.domain.playlist.dto.PlaylistDetailResponse;
 import com.techeer.backend.domain.playlist.dto.PlaylistResponse;
 import com.techeer.backend.domain.playlist.dto.PlaylistTrackAddRequest;
+import com.techeer.backend.domain.playlist.dto.PlaylistUpdateRequest;
+import com.techeer.backend.domain.playlist.dto.TrackOrderUpdateRequest;
 import com.techeer.backend.domain.playlist.entity.Playlist;
+import com.techeer.backend.domain.playlist.entity.PlaylistTrack;
 import com.techeer.backend.domain.playlist.entity.Track;
 import com.techeer.backend.domain.playlist.repository.PlaylistRepository;
 import com.techeer.backend.domain.playlist.repository.TrackRepository;
@@ -22,6 +25,7 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 
 class PlaylistServiceTest {
@@ -119,6 +123,85 @@ class PlaylistServiceTest {
     }
 
     @Test
+    void 이름만_수정하면_나머지_필드는_유지된다() {
+        Playlist playlist = Playlist.builder().memberId(1L).name("출근길").build();
+        when(playlistRepository.findById(1L)).thenReturn(Optional.of(playlist));
+
+        PlaylistResponse response = playlistService.update(1L, 1L,
+                new PlaylistUpdateRequest("새이름", null, null));
+
+        assertThat(response.name()).isEqualTo("새이름");
+        assertThat(response.isPublic()).isTrue();
+    }
+
+    @Test
+    void 공개범위만_수정하면_이름은_유지된다() {
+        Playlist playlist = Playlist.builder().memberId(1L).name("출근길").build();
+        when(playlistRepository.findById(1L)).thenReturn(Optional.of(playlist));
+
+        PlaylistResponse response = playlistService.update(1L, 1L,
+                new PlaylistUpdateRequest(null, null, false));
+
+        assertThat(response.name()).isEqualTo("출근길");
+        assertThat(response.isPublic()).isFalse();
+    }
+
+    @Test
+    void 곡_순서를_요청한_순서대로_반영한다() {
+        Playlist playlist = Playlist.builder().memberId(1L).name("출근길").build();
+        Track track1 = Track.builder().itunesTrackId(1L).title("A").build();
+        Track track2 = Track.builder().itunesTrackId(2L).title("B").build();
+        PlaylistTrack playlistTrack1 = PlaylistTrack.builder().playlist(playlist).track(track1).build();
+        PlaylistTrack playlistTrack2 = PlaylistTrack.builder().playlist(playlist).track(track2).build();
+        setId(playlistTrack1, 10L);
+        setId(playlistTrack2, 20L);
+        playlist.getTracks().add(playlistTrack1);
+        playlist.getTracks().add(playlistTrack2);
+        when(playlistRepository.findById(1L)).thenReturn(Optional.of(playlist));
+
+        playlistService.updateTrackOrder(1L, 1L, new TrackOrderUpdateRequest(List.of(20L, 10L)));
+
+        assertThat(playlistTrack2.getTrackOrder()).isEqualTo(0);
+        assertThat(playlistTrack1.getTrackOrder()).isEqualTo(1);
+    }
+
+    @Test
+    void 곡_순서_변경시_개수가_안_맞으면_PLAYLIST_TRACK_NOT_FOUND_예외() {
+        Playlist playlist = Playlist.builder().memberId(1L).name("출근길").build();
+        Track track1 = Track.builder().itunesTrackId(1L).title("A").build();
+        PlaylistTrack playlistTrack1 = PlaylistTrack.builder().playlist(playlist).track(track1).build();
+        setId(playlistTrack1, 10L);
+        playlist.getTracks().add(playlistTrack1);
+        when(playlistRepository.findById(1L)).thenReturn(Optional.of(playlist));
+
+        BusinessException exception = catchThrowableOfType(
+                BusinessException.class,
+                () -> playlistService.updateTrackOrder(1L, 1L, new TrackOrderUpdateRequest(List.of(10L, 999L))));
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PLAYLIST_TRACK_NOT_FOUND);
+    }
+
+    @Test
+    void 곡_순서_변경시_중복된_ID가_있으면_PLAYLIST_TRACK_NOT_FOUND_예외() {
+        Playlist playlist = Playlist.builder().memberId(1L).name("출근길").build();
+        Track track1 = Track.builder().itunesTrackId(1L).title("A").build();
+        Track track2 = Track.builder().itunesTrackId(2L).title("B").build();
+        PlaylistTrack playlistTrack1 = PlaylistTrack.builder().playlist(playlist).track(track1).build();
+        PlaylistTrack playlistTrack2 = PlaylistTrack.builder().playlist(playlist).track(track2).build();
+        setId(playlistTrack1, 10L);
+        setId(playlistTrack2, 20L);
+        playlist.getTracks().add(playlistTrack1);
+        playlist.getTracks().add(playlistTrack2);
+        when(playlistRepository.findById(1L)).thenReturn(Optional.of(playlist));
+
+        BusinessException exception = catchThrowableOfType(
+                BusinessException.class,
+                () -> playlistService.updateTrackOrder(1L, 1L, new TrackOrderUpdateRequest(List.of(10L, 10L))));
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PLAYLIST_TRACK_NOT_FOUND);
+    }
+
+    @Test
     void 존재하지_않는_트랙_삭제시_PLAYLIST_TRACK_NOT_FOUND_예외() {
         Playlist playlist = Playlist.builder().memberId(1L).name("출근길").build();
         when(playlistRepository.findById(1L)).thenReturn(Optional.of(playlist));
@@ -138,5 +221,9 @@ class PlaylistServiceTest {
         playlistService.delete(1L, 1L);
 
         verify(playlistRepository).delete(playlist);
+    }
+
+    private void setId(PlaylistTrack playlistTrack, Long id) {
+        ReflectionTestUtils.setField(playlistTrack, "id", id);
     }
 }

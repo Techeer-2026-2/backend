@@ -4,6 +4,8 @@ import com.techeer.backend.domain.playlist.dto.PlaylistCreateRequest;
 import com.techeer.backend.domain.playlist.dto.PlaylistDetailResponse;
 import com.techeer.backend.domain.playlist.dto.PlaylistResponse;
 import com.techeer.backend.domain.playlist.dto.PlaylistTrackAddRequest;
+import com.techeer.backend.domain.playlist.dto.PlaylistUpdateRequest;
+import com.techeer.backend.domain.playlist.dto.TrackOrderUpdateRequest;
 import com.techeer.backend.domain.playlist.entity.Playlist;
 import com.techeer.backend.domain.playlist.entity.PlaylistTrack;
 import com.techeer.backend.domain.playlist.entity.PlaylistType;
@@ -43,7 +45,7 @@ public class PlaylistService {
         return PlaylistResponse.from(playlistRepository.save(playlist));
     }
 
-    /** 서버가 추천으로 고른 곡들로 플레이리스트를 만든다. trackIds 의 순서를 그대로 유지한다. */
+    /** 서버가 추천으로 고른 곡들로 플레이리스트를 만든다. trackIds 의 순서가 곧 곡 순서(trackOrder)가 된다. */
     @Transactional
     public PlaylistDetailResponse createGenerated(Long memberId, String name, List<Long> trackIds) {
         Map<Long, Track> byId = trackRepository.findAllById(trackIds).stream()
@@ -53,9 +55,23 @@ public class PlaylistService {
                 .name(name)
                 .type(PlaylistType.COMMUTE_GENERATED)
                 .build();
-        trackIds.stream().map(byId::get).filter(Objects::nonNull).forEach(track ->
-                playlist.getTracks().add(PlaylistTrack.builder().playlist(playlist).track(track).build()));
+        List<Track> ordered = trackIds.stream().map(byId::get).filter(Objects::nonNull).toList();
+        for (int i = 0; i < ordered.size(); i++) {
+            PlaylistTrack playlistTrack = PlaylistTrack.builder().playlist(playlist).track(ordered.get(i)).build();
+            playlistTrack.updateOrder(i);
+            playlist.getTracks().add(playlistTrack);
+        }
         return PlaylistDetailResponse.from(playlistRepository.save(playlist));
+    }
+
+    @Transactional
+    public PlaylistResponse update(Long memberId, Long playlistId, PlaylistUpdateRequest request) {
+        Playlist playlist = findOwnedOrThrow(memberId, playlistId);
+        String name = request.name() != null ? request.name() : playlist.getName();
+        String description = request.description() != null ? request.description() : playlist.getDescription();
+        Boolean isPublic = request.isPublic() != null ? request.isPublic() : playlist.getIsPublic();
+        playlist.update(name, description, isPublic);
+        return PlaylistResponse.from(playlist);
     }
 
     public List<PlaylistResponse> findAll(Long memberId) {
@@ -114,6 +130,27 @@ public class PlaylistService {
                 .previewUrl(request.previewUrl())
                 .trackTimeMillis(request.trackTimeMillis())
                 .build()));
+    }
+
+    @Transactional
+    public void updateTrackOrder(Long memberId, Long playlistId, TrackOrderUpdateRequest request) {
+        Playlist playlist = findOwnedOrThrow(memberId, playlistId);
+        Map<Long, PlaylistTrack> tracksById = playlist.getTracks().stream()
+                .collect(Collectors.toMap(PlaylistTrack::getId, Function.identity()));
+
+        List<Long> orderedIds = request.playlistTrackIds();
+        long distinctCount = orderedIds.stream().distinct().count();
+        if (orderedIds.size() != tracksById.size() || distinctCount != orderedIds.size()) {
+            throw new BusinessException(ErrorCode.PLAYLIST_TRACK_NOT_FOUND);
+        }
+
+        for (int i = 0; i < orderedIds.size(); i++) {
+            PlaylistTrack track = tracksById.get(orderedIds.get(i));
+            if (track == null) {
+                throw new BusinessException(ErrorCode.PLAYLIST_TRACK_NOT_FOUND);
+            }
+            track.updateOrder(i);
+        }
     }
 
     @Transactional
