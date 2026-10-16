@@ -107,7 +107,7 @@ expect_fail "id 와 파일 이름 불일치" "$r" "파일 이름"
 
 r=$(make_repo notindexed)
 printf '# dev\n| id |\n|---|\n' > "$r/docs/context/dev/INDEX.md"
-expect_fail "INDEX 에 없는 기록" "$r" "INDEX.md 에 등록되지"
+expect_fail "INDEX 에 없는 기록" "$r" "등록되지 않았다"
 
 r=$(make_repo deadlink)
 sed 's#music/2026-10-16-sample.md#music/nothing.md#' "$r/docs/context/dev/INDEX.md" > "$r/x" && mv "$r/x" "$r/docs/context/dev/INDEX.md"
@@ -116,6 +116,25 @@ expect_fail "INDEX 링크가 없는 파일을 가리킴" "$r" "가리키는 파�
 r=$(make_repo longindex)
 { for i in $(seq 1 41); do echo "행 $i"; done; } >> "$r/docs/context/dev/INDEX.md"
 expect_fail "INDEX 40줄 초과" "$r" "INDEX 로 나눈다"
+
+r=$(make_repo similarid)
+sed 's#\[2026-10-16-sample\](music/2026-10-16-sample.md)#[2026-10-16-sample-v2](music/2026-10-16-sample-v2.md)#' "$r/docs/context/dev/INDEX.md" > "$r/x" && mv "$r/x" "$r/docs/context/dev/INDEX.md"
+cp "$r/$REC" "$r/docs/context/dev/music/2026-10-16-sample-v2.md"
+sed -i.bak 's/^id: .*/id: 2026-10-16-sample-v2/' "$r/docs/context/dev/music/2026-10-16-sample-v2.md" && rm -f "$r/docs/context/dev/music/2026-10-16-sample-v2.md.bak"
+expect_fail "다른 id 의 일부만 INDEX 에 있으면 등록 안 된 것" "$r" "2026-10-16-sample](경로)"
+
+r=$(make_repo wronglink)
+sed 's#(music/2026-10-16-sample.md)#(music/other.md)#' "$r/docs/context/dev/INDEX.md" > "$r/x" && mv "$r/x" "$r/docs/context/dev/INDEX.md"
+touch "$r/docs/context/dev/music/other.md"
+expect_fail "id 는 있지만 링크가 다른 파일을 가리킴" "$r" "등록되지 않았다"
+
+r=$(make_repo shortpw)
+echo "password: hunter2" >> "$r/$REC"
+expect_fail "짧은 password 값" "$r" "키·비밀번호"
+
+r=$(make_repo pwdkorean)
+echo "password: 없음 (비밀번호는 적지 않는다)" >> "$r/$REC"
+expect_pass "한글 설명이 붙은 password 는 통과" "$r"
 
 r=$(make_repo nofm)
 sed '1d' "$r/$REC" > "$r/x" && mv "$r/x" "$r/$REC"

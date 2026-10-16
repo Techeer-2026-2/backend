@@ -105,10 +105,20 @@ for f in $records; do
     fail "$rel: 본문이 ${lines}줄이다 (최대 ${MAX_BODY}줄). 결정을 둘로 나눈다"
   fi
 
+  # 이 기록으로 가는 링크 "[id](상대경로)" 가 구역 INDEX 중 하나에 있어야 한다. id 가 다른 id 의 일부여도 속지 않는다.
   if [ -n "$id" ] && [ -d "$CTX/$zone" ]; then
-    if ! grep -rqF --include=INDEX.md -- "$id" "$CTX/$zone"; then
-      fail "$rel: $zone 구역의 INDEX.md 에 등록되지 않았다"
-    fi
+    registered=0
+    for idx in $(find "$CTX/$zone" -type f -name INDEX.md); do
+      idx_dir=$(dirname "$idx")
+      case "$f" in
+        "$idx_dir"/*)
+          if grep -qF -- "[$id](${f#"$idx_dir"/})" "$idx"; then
+            registered=1
+          fi
+          ;;
+      esac
+    done
+    [ "$registered" -eq 1 ] || fail "$rel: $zone 구역의 INDEX.md 에 '[$id](경로)' 링크로 등록되지 않았다"
   fi
 done
 
@@ -137,8 +147,10 @@ secret_hits=$(grep -rnE --include='*.md' \
   -e 'sk-[A-Za-z0-9]{20,}' \
   -e '-----BEGIN [A-Z ]*PRIVATE KEY-----' \
   $scan_targets 2>/dev/null)
+# 키·토큰은 긴 값만, 비밀번호 계열은 짧은 값(영문·숫자·기호 4자 이상)도 잡는다. 한글 설명("없음")은 잡지 않는다.
 secret_hits2=$(grep -rniE --include='*.md' \
-  -e '(api[_-]?key|secret|password|passwd|token|app[_-]?key)[A-Za-z_-]*[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9/+_-]{12,}' \
+  -e '(api[_-]?key|token|app[_-]?key)[A-Za-z_-]*[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9/+_-]{12,}' \
+  -e '(secret|password|passwd|pwd)[A-Za-z_-]*[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9/+_.!@#$%^&*-]{4,}' \
   $scan_targets 2>/dev/null)
 if [ -n "$secret_hits" ] || [ -n "$secret_hits2" ]; then
   fail "키·비밀번호로 보이는 문자열이 있다 (값은 출력하지 않는다)"

@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: 소스 체크아웃
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: 점검 스크립트 자체 테스트
         run: bash scripts/check-docs.test.sh
