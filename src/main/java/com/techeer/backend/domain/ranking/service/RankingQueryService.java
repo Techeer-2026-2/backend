@@ -22,6 +22,7 @@ public class RankingQueryService {
     // 배치 교체 도중에도 hour, scope, items가 같은 DB snapshot을 읽는다.
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public ChartResponse nearby(double lat, double lng, int limit) {
+        validateLimit(limit, RankingCalculator.MAX_ITEMS);
         String cell = geo.cell(lat, lng);
         List<String> keys = new ArrayList<>();
         keys.add("NEARBY:" + cell);
@@ -33,13 +34,17 @@ public class RankingQueryService {
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public ChartResponse global(int limit) {
+        validateLimit(limit, RankingCalculator.MAX_GLOBAL_ITEMS);
         return query(List.of("GLOBAL"), limit, false);
     }
 
-    private ChartResponse query(List<String> keys, int limit, boolean nearby) {
-        if (limit < 1 || limit > RankingCalculator.MAX_ITEMS) {
+    private void validateLimit(int limit, int maximum) {
+        if (limit < 1 || limit > maximum) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
+    }
+
+    private ChartResponse query(List<String> keys, int limit, boolean nearby) {
         Batch batch = repository.latestBatch().orElse(null);
         if (batch == null) {
             return new ChartResponse("집계 준비 중", null, null, false, "NONE", "PENDING", List.of());

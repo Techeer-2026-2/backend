@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>통근길 · 주변 인기곡</title>
+    <title>통근길 · 인기곡 차트</title>
     <link rel="stylesheet" href="styles.css" />
     <script type="module" src="app.js"></script>
   </head>
@@ -23,8 +23,8 @@
             <p class="eyebrow">THE SOUND OF YOUR COMMUTE</p>
             <h1>같은 길,<br />지금 우리 음악.</h1>
             <p class="description">
-              이 주변을 지나온 사람들이 끝까지 들은 음악.<br />당신의 다음 한
-              곡을 여기서 만나보세요.
+              모두가 끝까지 들은 인기곡을 만나보세요.<br />내 주변 차트도 함께
+              확인할 수 있어요.
             </p>
           </div>
           <div class="record" aria-hidden="true">
@@ -36,7 +36,7 @@
         <section class="chart-section" aria-labelledby="chart-heading">
           <div class="chart-top">
             <div>
-              <p class="eyebrow">HOURLY CHART · TOP 50</p>
+              <p class="eyebrow" id="chart-size">HOURLY CHART · TOP 100</p>
               <h2 id="chart-heading">전체 인기곡</h2>
             </div>
             <div class="tabs" aria-label="차트 범위">
@@ -67,7 +67,7 @@
           </div>
           <footer class="chart-footer">
             <span id="updated">매시 정각에 직전 1시간의 청취를 집계합니다.</span
-            ><span>재생 시작 위치 기준</span>
+            ><span id="chart-rule">전체 차트는 곡별 고유 완주 청취자 20명 이상</span>
           </footer>
         </section>
         <aside class="how">

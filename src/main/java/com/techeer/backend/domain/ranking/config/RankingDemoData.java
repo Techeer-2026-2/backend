@@ -61,8 +61,18 @@ public class RankingDemoData implements ApplicationRunner {
         for (int track = 0; track < TRACK_COUNT; track++) {
             playback.saveTrack(trackId(track), new TrackInput(title(track), ARTISTS[track % ARTISTS.length], null, null));
         }
+        // 직전 한 시간 전에는 곡 배정을 한 칸 밀어 채운다. 곡마다 청취자 수가 같아 동점이면 최근 완주 순으로 순위가 정해지므로,
+        // 두 시간의 순위가 달라져 전체 차트에서 상승·하락 표시(rankChange)를 볼 수 있다.
+        Instant previousHour = hour.minus(1, ChronoUnit.HOURS);
+        seedHour(previousHour, 1);
+        seedHour(hour, 0);
+        batch.rebuild(previousHour);
+        batch.rebuild(hour);
+    }
+
+    private void seedHour(Instant hour, int trackShift) {
         for (int event = 0; event < EVENT_COUNT; event++) {
-            int track = event % TRACK_COUNT;
+            int track = (event + trackShift) % TRACK_COUNT;
             GpsPoint point = gpsPoint(event);
             Instant startedAt = hour.plusSeconds(60 + event * 3L);
             String key = "dataset-1000-gps:" + hour + ":" + event;
@@ -75,7 +85,6 @@ public class RankingDemoData implements ApplicationRunner {
             playback.record(userId, new EventRequest(id("event:" + key), sessionId, EventType.TRACK_COMPLETED,
                     1.0, startedAt.plusSeconds(120)));
         }
-        batch.rebuild(hour);
     }
 
     private String trackId(int track) {
