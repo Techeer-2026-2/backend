@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.techeer.backend.TestcontainersConfiguration;
 import com.techeer.backend.domain.commuteprofile.entity.CommuteProfile;
+import com.techeer.backend.domain.commuteprofile.entity.CommuteRoute;
 import com.techeer.backend.domain.commuteprofile.entity.CommuteType;
 import com.techeer.backend.domain.commuteprofile.entity.Location;
 import com.techeer.backend.domain.commuteprofile.repository.CommuteProfileRepository;
@@ -18,6 +19,7 @@ import com.techeer.backend.domain.playlist.entity.Playlist;
 import com.techeer.backend.domain.playlist.entity.Track;
 import com.techeer.backend.domain.playlist.repository.PlaylistRepository;
 import com.techeer.backend.domain.playlist.repository.TrackRepository;
+import com.techeer.backend.domain.tmap.TransportMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -369,13 +371,8 @@ class CommuteSessionIntegrationTest {
 
     private long profile(Long memberId, int minutes) {
         CommuteProfile profile = profileWithRoute(memberId);
-        // 경로는 SQL 로 직접 넣는다. CommuteRoute 엔티티를 저장하면 route_detail(jsonb) 칼럼에 문자열을 넣어 PostgreSQL 이
-        // 거절하는 기존 문제가 있다(통근 프로필 API 쪽 별도 이슈). 이 테스트가 확인하려는 것은 통근 세션이다.
-        jdbcTemplate.update("""
-                insert into commute_routes (commute_profile_id, transport_mode, average_duration_minutes,
-                                            created_at, updated_at)
-                values (?, 'PUBLIC_TRANSIT', ?, now(), now())
-                """, profile.getId(), minutes);
+        routeRepository.save(CommuteRoute.builder().commuteProfile(profile)
+                .transportMode(TransportMode.PUBLIC_TRANSIT).averageDurationMinutes(minutes).build());
         return profile.getId();
     }
 
