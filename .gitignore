@@ -53,3 +53,6 @@ out/
 
 # oh-my-claudecode 로컬 작업 기록
 .omc/
+
+# AI 도구 개인 설정
+CLAUDE.local.md
