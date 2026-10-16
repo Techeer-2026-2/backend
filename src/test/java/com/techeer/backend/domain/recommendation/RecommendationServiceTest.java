@@ -273,6 +273,43 @@ class RecommendationServiceTest {
     }
 
     @Test
+    void 주변_차트의_곡이_이번_후보에_없으면_반영하지_않았다고_알린다() {
+        when(profiles.findById(1L)).thenReturn(Optional.of(profile(7L, CommuteType.TO_WORK)));
+        when(weatherService.getCurrentSnapshot(anyDouble(), anyDouble()))
+                .thenReturn(new WeatherSnapshot(WeatherCondition.RAINY, 12.0, false, false));
+        when(scores.findCandidates(any(), anyDouble())).thenReturn(rainyPool(12));
+        when(playlistService.createGenerated(any(), any(), anyList())).thenReturn(emptyDetail());
+        // 차트에는 곡이 있지만 후보(1~12번)에 없는 곡이다
+        when(popularityProvider.find(any(), any())).thenReturn(
+                new NearbyPopularity(java.util.Map.of(9999L, 0.5), "NEARBY", "성수동 주변"));
+
+        PlaylistGenerateResponse response = service.generate(7L, new PlaylistGenerateRequest(1L, null, 12));
+
+        assertThat(response.context().popularity().applied()).isFalse();
+        assertThat(response.context().popularity().scope()).isEqualTo("NONE");
+        assertThat(response.context().popularity().locationLabel()).isNull();
+        assertThat(response.context().popularity().boostedTracks()).isZero();
+    }
+
+    @Test
+    void 가산점을_받는_후보가_있으면_이번에_뽑히지_않았어도_반영했다고_알린다() {
+        when(profiles.findById(1L)).thenReturn(Optional.of(profile(7L, CommuteType.TO_WORK)));
+        when(weatherService.getCurrentSnapshot(anyDouble(), anyDouble()))
+                .thenReturn(new WeatherSnapshot(WeatherCondition.RAINY, 12.0, false, false));
+        when(scores.findCandidates(any(), anyDouble())).thenReturn(rainyPool(30));
+        when(playlistService.createGenerated(any(), any(), anyList())).thenReturn(emptyDetail());
+        when(popularityProvider.find(any(), any())).thenReturn(
+                new NearbyPopularity(java.util.Map.of(1L, 0.5), "NEARBY", "성수동 주변"));
+
+        // 30곡 후보에서 1곡만 뽑으면 1번 곡이 안 뽑힐 수 있다. 그래도 반영은 했다(applied)고 알려야 한다.
+        PlaylistGenerateResponse response = service.generate(7L, new PlaylistGenerateRequest(1L, null, 1));
+
+        assertThat(response.context().popularity().applied()).isTrue();
+        assertThat(response.context().popularity().scope()).isEqualTo("NEARBY");
+        assertThat(response.context().popularity().boostedTracks()).isBetween(0, 1);
+    }
+
+    @Test
     void 주변_차트를_쓰지_못하면_반영하지_않았다고_알린다() {
         when(profiles.findById(1L)).thenReturn(Optional.of(profile(7L, CommuteType.TO_WORK)));
         when(weatherService.getCurrentSnapshot(anyDouble(), anyDouble()))

@@ -71,8 +71,9 @@ public class RecommendationService {
                 profile.getCommuteType());
         Map<TrackMood, Double> weights = MoodRules.weights(context);
 
-        NearbyPopularity popularity = findPopularity(request, profile.getDeparture());
         List<Candidate> candidates = loadCandidates(weights);
+        NearbyPopularity popularity = effectivePopularity(
+                findPopularity(request, profile.getDeparture()), candidates, weights);
         Integer targetMinutes = request.size() == null ? commuteMinutesOrNull(profile) : null;
         List<Track> selected = targetMinutes == null
                 ? PlaylistRecommender.select(candidates, weights, sizeOrDefault(request), random, popularity)
@@ -88,6 +89,19 @@ public class RecommendationService {
         return PlaylistGenerateResponse.of(playlist, context, topMoods(weights),
                 new PlaylistGenerateResponse.Popularity(
                         popularity.applied(), popularity.scope(), popularity.locationLabel(), (int) boosted));
+    }
+
+    /**
+     * 가산점이 이번 추천에 실제로 쓰일 수 있는지 가려, 쓰일 수 없으면 "반영 안 함"으로 바꾼다.
+     * 차트에 연결 가능한 곡이 있어도 그 곡들이 이번 후보에 없거나 후보 자격(최소 적합도)에 못 미치면 아무 영향이 없으므로,
+     * 응답이 반영했다고 알리지 않도록 후보 안에서 가산점을 받는 곡이 있는지 확인한다.
+     */
+    private static NearbyPopularity effectivePopularity(
+            NearbyPopularity popularity, List<Candidate> candidates, Map<TrackMood, Double> weights) {
+        boolean usable = popularity.applied() && candidates.stream().anyMatch(c ->
+                PlaylistRecommender.relevance(c, weights) >= PlaylistRecommender.MIN_RELEVANCE
+                        && popularity.boostOf(c.track().getItunesTrackId()) > 0);
+        return usable ? popularity : NearbyPopularity.none();
     }
 
     /**
