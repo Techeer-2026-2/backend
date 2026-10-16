@@ -40,6 +40,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.random.RandomGenerator;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -51,11 +52,17 @@ class RecommendationServiceTest {
     private final TrackMoodScoreRepository scores = mock(TrackMoodScoreRepository.class);
     private final PlaylistService playlistService = mock(PlaylistService.class);
     private final WeatherService weatherService = mock(WeatherService.class);
+    private final NearbyPopularityProvider popularityProvider = mock(NearbyPopularityProvider.class);
     // 한국 시간 18시 = 퇴근 러시
     private final Clock clock = Clock.fixed(Instant.parse("2026-10-16T09:00:00Z"), ZoneId.of("Asia/Seoul"));
     private final RecommendationService service = new RecommendationService(
-            profiles, routes, scores, playlistService, new RunningTimeAdjuster(), weatherService, clock,
-            RandomGenerator.of("L64X128MixRandom"));
+            profiles, routes, scores, playlistService, new RunningTimeAdjuster(), weatherService, popularityProvider,
+            clock, RandomGenerator.of("L64X128MixRandom"));
+
+    @BeforeEach
+    void noPopularityByDefault() {
+        when(popularityProvider.find(any(), any())).thenReturn(NearbyPopularity.none());
+    }
 
     private CommuteProfile profile(long memberId, CommuteType type) {
         CommuteProfile p = CommuteProfile.builder()
@@ -206,5 +213,107 @@ class RecommendationServiceTest {
 
         assertThat(e.getErrorCode()).isEqualTo(ErrorCode.PLAYLIST_GENERATE_NO_CANDIDATES);
         verify(playlistService, never()).createGenerated(any(), any(), anyList());
+    }
+
+    @Test
+    void 요청에_위치가_있으면_그_위치로_주변_인기곡을_조회한다() {
+        when(profiles.findById(1L)).thenReturn(Optional.of(profile(7L, CommuteType.TO_WORK)));
+        when(weatherService.getCurrentSnapshot(anyDouble(), anyDouble()))
+                .thenReturn(new WeatherSnapshot(WeatherCondition.RAINY, 12.0, false, false));
+        when(scores.findCandidates(any(), anyDouble())).thenReturn(rainyPool(30));
+        when(playlistService.createGenerated(any(), any(), anyList())).thenReturn(emptyDetail());
+
+        service.generate(7L, new PlaylistGenerateRequest(1L, null, 5, 37.55, 127.04));
+
+        verify(popularityProvider).find(37.55, 127.04);
+        verify(popularityProvider, never()).find(eq(37.5), eq(127.0));
+    }
+
+    @Test
+    void 요청에_위치가_없으면_통근_프로필_출발지로_조회한다() {
+        when(profiles.findById(1L)).thenReturn(Optional.of(profile(7L, CommuteType.TO_WORK)));
+        when(weatherService.getCurrentSnapshot(anyDouble(), anyDouble()))
+                .thenReturn(new WeatherSnapshot(WeatherCondition.RAINY, 12.0, false, false));
+        when(scores.findCandidates(any(), anyDouble())).thenReturn(rainyPool(30));
+        when(playlistService.createGenerated(any(), any(), anyList())).thenReturn(emptyDetail());
+
+        service.generate(7L, new PlaylistGenerateRequest(1L, null, 5));
+
+        verify(popularityProvider).find(37.5, 127.0);
+    }
+
+    @Test
+    void 위도와_경도_중_하나만_보내면_INVALID_INPUT() {
+        when(profiles.findById(1L)).thenReturn(Optional.of(profile(7L, CommuteType.TO_WORK)));
+
+        BusinessException e = catchThrowableOfType(BusinessException.class,
+                () -> service.generate(7L, new PlaylistGenerateRequest(1L, null, 5, 37.55, null)));
+
+        assertThat(e.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT);
+        verify(playlistService, never()).createGenerated(any(), any(), anyList());
+    }
+
+    @Test
+    void 응답에_주변_인기곡을_반영했는지와_차트_범위를_담는다() {
+        when(profiles.findById(1L)).thenReturn(Optional.of(profile(7L, CommuteType.TO_WORK)));
+        when(weatherService.getCurrentSnapshot(anyDouble(), anyDouble()))
+                .thenReturn(new WeatherSnapshot(WeatherCondition.RAINY, 12.0, false, false));
+        when(scores.findCandidates(any(), anyDouble())).thenReturn(rainyPool(12));
+        when(playlistService.createGenerated(any(), any(), anyList())).thenReturn(emptyDetail());
+        // 1~3번 곡이 주변 차트에 있다. 후보가 12곡뿐이고 12곡을 모두 뽑으므로 세 곡 모두 포함된다.
+        when(popularityProvider.find(any(), any())).thenReturn(
+                new NearbyPopularity(java.util.Map.of(1L, 0.5, 2L, 0.3, 3L, 0.1), "PARENT", "성수동 일대"));
+
+        PlaylistGenerateResponse response = service.generate(7L, new PlaylistGenerateRequest(1L, null, 12));
+
+        assertThat(response.context().popularity().applied()).isTrue();
+        assertThat(response.context().popularity().scope()).isEqualTo("PARENT");
+        assertThat(response.context().popularity().locationLabel()).isEqualTo("성수동 일대");
+        assertThat(response.context().popularity().boostedTracks()).isEqualTo(3);
+    }
+
+    @Test
+    void 주변_차트를_쓰지_못하면_반영하지_않았다고_알린다() {
+        when(profiles.findById(1L)).thenReturn(Optional.of(profile(7L, CommuteType.TO_WORK)));
+        when(weatherService.getCurrentSnapshot(anyDouble(), anyDouble()))
+                .thenReturn(new WeatherSnapshot(WeatherCondition.RAINY, 12.0, false, false));
+        when(scores.findCandidates(any(), anyDouble())).thenReturn(rainyPool(30));
+        when(playlistService.createGenerated(any(), any(), anyList())).thenReturn(emptyDetail());
+
+        PlaylistGenerateResponse response = service.generate(7L, new PlaylistGenerateRequest(1L, null, 5));
+
+        assertThat(response.context().popularity().applied()).isFalse();
+        assertThat(response.context().popularity().scope()).isEqualTo("NONE");
+        assertThat(response.context().popularity().boostedTracks()).isZero();
+    }
+
+    @Test
+    void 주변_차트에_있는_곡이_실제로_더_자주_뽑힌다() {
+        when(profiles.findById(1L)).thenReturn(Optional.of(profile(7L, CommuteType.TO_WORK)));
+        when(weatherService.getCurrentSnapshot(anyDouble(), anyDouble()))
+                .thenReturn(new WeatherSnapshot(WeatherCondition.RAINY, 12.0, false, false));
+        when(scores.findCandidates(any(), anyDouble())).thenReturn(rainyPool(20));
+        when(playlistService.createGenerated(any(), any(), anyList())).thenReturn(emptyDetail());
+
+        int plain = timesTrackOneIsPicked(300);
+        when(popularityProvider.find(any(), any())).thenReturn(
+                new NearbyPopularity(java.util.Map.of(1L, 5.0), "NEARBY", "성수동 주변"));
+        int boosted = timesTrackOneIsPicked(300);
+
+        // 20곡 중 1곡만 뽑으면 가산점이 없을 때 1번 곡은 5% 근처, 가산점 5.0(36배)이면 65% 근처
+        assertThat(plain).isLessThan(60);
+        assertThat(boosted).isGreaterThan(120);
+    }
+
+    private int timesTrackOneIsPicked(int rounds) {
+        int picked = 0;
+        for (int i = 0; i < rounds; i++) {
+            org.mockito.Mockito.clearInvocations(playlistService);
+            service.generate(7L, new PlaylistGenerateRequest(1L, null, 1));
+            ArgumentCaptor<List<Long>> trackIds = ArgumentCaptor.captor();
+            verify(playlistService).createGenerated(eq(7L), any(), trackIds.capture());
+            picked += trackIds.getValue().contains(1L) ? 1 : 0;
+        }
+        return picked;
     }
 }

@@ -1,6 +1,8 @@
 package com.techeer.backend.domain.recommendation;
 
 import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -22,6 +24,9 @@ import com.techeer.backend.domain.playlist.entity.TrackMoodSource;
 import com.techeer.backend.domain.playlist.repository.PlaylistRepository;
 import com.techeer.backend.domain.playlist.repository.TrackMoodScoreRepository;
 import com.techeer.backend.domain.playlist.repository.TrackRepository;
+import com.techeer.backend.domain.ranking.dto.RankingDtos.ChartResponse;
+import com.techeer.backend.domain.ranking.dto.RankingDtos.Item;
+import com.techeer.backend.domain.ranking.service.RankingQueryService;
 import com.techeer.backend.domain.weather.WeatherCondition;
 import com.techeer.backend.domain.weather.WeatherSnapshot;
 import com.techeer.backend.domain.weather.service.WeatherService;
@@ -64,6 +69,7 @@ class PlaylistGenerateIntegrationTest {
     @Autowired PlatformTransactionManager transactionManager;
 
     @MockitoBean WeatherService weatherService;
+    @MockitoBean RankingQueryService rankingQueryService;
 
     /** 시간대 규칙이 테스트마다 달라지지 않도록 한국 시간 18시(퇴근 러시)로 고정한다. */
     @TestConfiguration
@@ -104,6 +110,9 @@ class PlaylistGenerateIntegrationTest {
                 .build()).getId();
         when(weatherService.getCurrentSnapshot(anyDouble(), anyDouble()))
                 .thenReturn(new WeatherSnapshot(WeatherCondition.RAINY, 11.0, false, false));
+        // 기본은 "아직 집계 전"인 주변 차트. 필요한 테스트에서 바꾼다.
+        when(rankingQueryService.nearby(anyDouble(), anyDouble(), anyInt()))
+                .thenReturn(new ChartResponse("집계 준비 중", null, null, false, "NONE", "PENDING", List.of()));
     }
 
     private String body(long profile, Integer size) {
@@ -190,5 +199,62 @@ class PlaylistGenerateIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON).content(body(profileId, 5)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PLAYLIST_GENERATE_NO_CANDIDATES"));
+    }
+
+    @Test
+    void 주변_차트가_있으면_인기곡_반영_정보를_응답에_담는다() throws Exception {
+        // 차트의 1번 곡은 우리 곡(itunes-1), "demo-9" 는 연결할 수 없는 ID
+        when(rankingQueryService.nearby(anyDouble(), anyDouble(), anyInt())).thenReturn(new ChartResponse(
+                "성수동 주변", null, null, false, "NEARBY", "READY",
+                List.of(new Item(1, 30, new com.techeer.backend.domain.ranking.dto.RankingDtos.Track(
+                                "itunes-1", "비 노래1", "가수1", null, null)),
+                        new Item(2, 20, new com.techeer.backend.domain.ranking.dto.RankingDtos.Track(
+                                "demo-9", "모르는 곡", "누구", null, null)))));
+
+        mockMvc.perform(post("/api/v1/playlists/generate").header("X-Member-Id", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"commuteProfileId\":" + profileId + ",\"size\":8,"
+                                + "\"latitude\":37.55,\"longitude\":127.04}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.context.popularity.applied").value(true))
+                .andExpect(jsonPath("$.context.popularity.scope").value("NEARBY"))
+                .andExpect(jsonPath("$.context.popularity.locationLabel").value("성수동 주변"))
+                .andExpect(jsonPath("$.context.popularity.boostedTracks")
+                        .value(org.hamcrest.Matchers.lessThanOrEqualTo(1)));
+        verify(rankingQueryService).nearby(37.55, 127.04, 50);
+    }
+
+    @Test
+    void 위치를_보내지_않으면_통근_프로필_출발지로_주변_차트를_조회한다() throws Exception {
+        mockMvc.perform(post("/api/v1/playlists/generate").header("X-Member-Id", "1")
+                        .contentType(MediaType.APPLICATION_JSON).content(body(profileId, 5)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.context.popularity.applied").value(false))
+                .andExpect(jsonPath("$.context.popularity.scope").value("NONE"));
+        verify(rankingQueryService).nearby(37.5, 127.0, 50);
+    }
+
+    @Test
+    void 랭킹_조회가_실패해도_추천은_201_로_만든다() throws Exception {
+        when(rankingQueryService.nearby(anyDouble(), anyDouble(), anyInt()))
+                .thenThrow(new IllegalStateException("ranking down"));
+
+        mockMvc.perform(post("/api/v1/playlists/generate").header("X-Member-Id", "1")
+                        .contentType(MediaType.APPLICATION_JSON).content(body(profileId, 5)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.tracks.length()").value(5))
+                .andExpect(jsonPath("$.context.popularity.applied").value(false));
+    }
+
+    @Test
+    void 위도만_보내거나_범위를_벗어난_위치는_400() throws Exception {
+        mockMvc.perform(post("/api/v1/playlists/generate").header("X-Member-Id", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"commuteProfileId\":" + profileId + ",\"latitude\":37.55}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/v1/playlists/generate").header("X-Member-Id", "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"commuteProfileId\":" + profileId + ",\"latitude\":95,\"longitude\":127}"))
+                .andExpect(status().isBadRequest());
     }
 }
