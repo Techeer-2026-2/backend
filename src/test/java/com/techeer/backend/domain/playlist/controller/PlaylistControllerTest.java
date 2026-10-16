@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.techeer.backend.domain.playlist.service.PlaylistService;
+import com.techeer.backend.domain.recommendation.RecommendationService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,9 @@ class PlaylistControllerTest {
 
     @MockitoBean
     private PlaylistService playlistService;
+
+    @MockitoBean
+    private RecommendationService recommendationService;
 
     @Test
     @DisplayName("곡을 101개 보내면 플레이리스트 서비스를 부르지 않고 400 INVALID_INPUT 을 돌려준다")

@@ -5,6 +5,9 @@ import com.techeer.backend.domain.playlist.dto.PlaylistDetailResponse;
 import com.techeer.backend.domain.playlist.dto.PlaylistResponse;
 import com.techeer.backend.domain.playlist.dto.PlaylistTrackAddRequest;
 import com.techeer.backend.domain.playlist.service.PlaylistService;
+import com.techeer.backend.domain.recommendation.RecommendationService;
+import com.techeer.backend.domain.recommendation.dto.PlaylistGenerateRequest;
+import com.techeer.backend.domain.recommendation.dto.PlaylistGenerateResponse;
 import com.techeer.backend.global.resolver.MemberId;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,12 +33,22 @@ import org.springframework.web.bind.annotation.RestController;
 public class PlaylistController {
 
     private final PlaylistService playlistService;
+    private final RecommendationService recommendationService;
 
     @Operation(summary = "플레이리스트 생성")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping
     public PlaylistResponse create(@MemberId Long memberId, @Valid @RequestBody PlaylistCreateRequest request) {
         return playlistService.create(memberId, request);
+    }
+
+    @Operation(summary = "날씨·시간대 기반 플레이리스트 자동 생성",
+            description = "통근 프로필의 출발지 날씨, 현재 시간대, 출근/퇴근 구분으로 곡을 골라 COMMUTE_GENERATED 플레이리스트를 만듭니다.")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PostMapping("/generate")
+    public PlaylistGenerateResponse generate(
+            @MemberId Long memberId, @Valid @RequestBody PlaylistGenerateRequest request) {
+        return recommendationService.generate(memberId, request);
     }
 
     @Operation(summary = "플레이리스트 목록 조회")
