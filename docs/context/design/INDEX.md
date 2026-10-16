@@ -8,3 +8,4 @@
 | [2026-10-16-member-token-with-header-fallback](api/2026-10-16-member-token-with-header-fallback.md) | 제안 | @MemberId 는 로그인 토큰을 우선하고 X-Member-Id 는 설정으로 끌 수 있게 병행하며 내 정보 API 는 닉네임만 수정한다 |
 | [2026-10-16-playlist-share-port-from-pr83](api/2026-10-16-playlist-share-port-from-pr83.md) | 제안 | PR #83 의 자체 플레이리스트를 쓰지 않고 develop 의 Playlist·@MemberId 위에 공유 토큰과 청취 기록만 다시 구현한다 |
 | [2026-10-16-location-popularity-boost](api/2026-10-16-location-popularity-boost.md) | 제안 | 추천 적합도에 주변 인기곡 가산점(최대 +50%, 차트 범위가 넓을수록 약하게)을 곱하고 분위기 후보 풀 밖의 곡은 넣지 않는다 |
+| [2026-10-17-global-top100-port-from-pr103](api/2026-10-17-global-top100-port-from-pr103.md) | 제안 | 옛 랭킹 구현이 딸려 와 충돌하는 PR #103 을 합치지 않고 전체 Top 100·순위 변동만 develop 의 Top 50 기준에 맞춰 다시 적용했다 |

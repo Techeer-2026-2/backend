@@ -206,9 +206,9 @@ class PlaylistGenerateIntegrationTest {
         // 차트의 1번 곡은 우리 곡(itunes-1), "demo-9" 는 연결할 수 없는 ID
         when(rankingQueryService.nearby(anyDouble(), anyDouble(), anyInt())).thenReturn(new ChartResponse(
                 "성수동 주변", null, null, false, "NEARBY", "READY",
-                List.of(new Item(1, 30, new com.techeer.backend.domain.ranking.dto.RankingDtos.Track(
+                List.of(new Item(1, 30, null, new com.techeer.backend.domain.ranking.dto.RankingDtos.Track(
                                 "itunes-1", "비 노래1", "가수1", null, null)),
-                        new Item(2, 20, new com.techeer.backend.domain.ranking.dto.RankingDtos.Track(
+                        new Item(2, 20, null, new com.techeer.backend.domain.ranking.dto.RankingDtos.Track(
                                 "demo-9", "모르는 곡", "누구", null, null)))));
 
         mockMvc.perform(post("/api/v1/playlists/generate").header("X-Member-Id", "1")

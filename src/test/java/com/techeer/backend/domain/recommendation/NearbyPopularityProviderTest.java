@@ -25,7 +25,7 @@ class NearbyPopularityProviderTest {
     private final NearbyPopularityProvider provider = new NearbyPopularityProvider(ranking);
 
     private static Item item(int rank, long listeners, String trackId) {
-        return new Item(rank, listeners, new Track(trackId, "곡", "가수", null, null));
+        return new Item(rank, listeners, null, new Track(trackId, "곡", "가수", null, null));
     }
 
     private static ChartResponse chart(String scope, String status, Item... items) {

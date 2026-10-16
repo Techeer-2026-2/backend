@@ -20,6 +20,9 @@ public class RankingCalculator {
     public static final int MIN_REGION_LISTENERS = 20;
     public static final int MIN_TRACK_LISTENERS = 3;
     public static final int MAX_ITEMS = 50;
+    /** 전체 차트는 위치 없는 청취자도 포함하므로 곡별 기준을 더 높게(20명) 두고 100곡까지 보여 준다. */
+    public static final int MIN_GLOBAL_TRACK_LISTENERS = 20;
+    public static final int MAX_GLOBAL_ITEMS = 100;
     private final RankingGeo geo;
 
     public List<Chart> calculate(List<Completion> events) {
@@ -76,12 +79,13 @@ public class RankingCalculator {
                 List<Completion> plays = entry.getValue();
                 return new Score(entry.getKey(), plays.stream().map(Completion::userId).distinct().count(),
                         plays.size(), plays.stream().map(Completion::occurredAt).max(Comparator.naturalOrder()).orElseThrow());
-            }).filter(score -> score.listeners() >= MIN_TRACK_LISTENERS)
+            }).filter(score -> score.listeners() >= (key.equals("GLOBAL")
+                    ? MIN_GLOBAL_TRACK_LISTENERS : MIN_TRACK_LISTENERS))
                     .sorted(Comparator.comparingLong(Score::listeners).reversed()
                             .thenComparing(Comparator.comparingLong(Score::completions).reversed())
                             .thenComparing(Score::lastCompletedAt, Comparator.reverseOrder())
                             .thenComparing(Score::trackId))
-                    .limit(MAX_ITEMS).toList();
+                    .limit(key.equals("GLOBAL") ? MAX_GLOBAL_ITEMS : MAX_ITEMS).toList();
             return new Chart(key, label, listeners.size(), scores);
         }
     }

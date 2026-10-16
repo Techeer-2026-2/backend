@@ -241,7 +241,7 @@ h2 {
 .track {
   display: grid;
   width: 100%;
-  grid-template-columns: 35px 46px 1fr auto 30px;
+  grid-template-columns: 46px 46px 1fr auto 30px;
   align-items: center;
   gap: 15px;
   background: transparent;
@@ -258,9 +258,29 @@ h2 {
   border-bottom: 0;
 }
 .rank {
+  display: block;
   font-size: 16px;
   color: #748069;
   text-align: center;
+}
+.rank-block {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+}
+.rank-change {
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.rank-change.up {
+  color: #46734a;
+}
+.rank-change.down {
+  color: #b46b5b;
+}
+.rank-change.same {
+  color: #8c9486;
 }
 .tracks li:first-child .rank {
   color: var(--green);
@@ -482,7 +502,7 @@ dialog a {
     line-height: 1.8;
   }
   .track {
-    grid-template-columns: 20px 40px 1fr 35px;
+    grid-template-columns: 38px 40px 1fr 35px;
     gap: 10px;
   }
   .cover {

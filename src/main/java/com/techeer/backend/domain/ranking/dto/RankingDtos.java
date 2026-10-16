@@ -61,7 +61,11 @@ public final class RankingDtos {
     public record EventResult(UUID eventId, boolean created, boolean counted, String locationStatus) {
     }
 
-    public record Item(int rank, long uniqueListenerCount, Track track) {
+    /**
+     * @param rankChange 직전 한 시간 차트의 순위에서 현재 순위를 뺀 값(양수 상승, 음수 하락, 0 유지).
+     *        직전 시간에 없던 곡이면 null 이라 응답에서 빠진다
+     */
+    public record Item(int rank, long uniqueListenerCount, Integer rankChange, Track track) {
     }
 
     public record ChartResponse(String locationLabel, OffsetDateTime rankedHour, OffsetDateTime updatedAt,

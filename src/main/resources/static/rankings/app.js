@@ -32,7 +32,7 @@ async function load() {
     const path =
       mode === "nearby"
         ? `nearby?lat=${coordinates.lat}&lng=${coordinates.lng}&limit=50`
-        : "global?limit=50";
+        : "global?limit=100";
     const result = await fetch(`/api/v1/rankings/tracks/${path}`);
     if (!result.ok)
       throw new Error(
@@ -41,6 +41,11 @@ async function load() {
     const { data } = await result.json();
     if (current !== requestNumber) return;
     $("chart-heading").textContent = data.locationLabel;
+    $("chart-size").textContent = mode === "global" ? "HOURLY CHART · TOP 100" : "HOURLY CHART · TOP 50";
+    $("chart-rule").textContent =
+      data.scope === "GLOBAL"
+        ? "전체 차트는 곡별 고유 완주 청취자 20명 이상"
+        : "주변 차트는 지역 청취자 20명·곡별 3명 이상";
     $("period").textContent = data.rankedHour
       ? `${new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric" }).format(new Date(data.rankedHour))} · ${time.format(new Date(data.rankedHour))}–${time.format(new Date(Date.parse(data.rankedHour) + 3599000))} 집계 (한국 시간)`
       : "첫 시간별 차트를 준비하고 있어요.";
@@ -68,7 +73,19 @@ async function load() {
         `${item.rank}위 ${item.track.title}, ${item.track.artistName} 상세 보기`,
       );
       // 메타데이터는 HTML 문자열로 삽입하지 않는다.
-      const rank = element("span", "rank", String(item.rank).padStart(2, "0"));
+      const rankBlock = element("span", "rank-block", "");
+      rankBlock.append(element("span", "rank", String(item.rank).padStart(2, "0")));
+      if (mode === "global" && item.rankChange != null) {
+        const change = item.rankChange;
+        const label = change > 0 ? `▲ ${change}` : change < 0 ? `▼ ${-change}` : "–";
+        const state = change > 0 ? "up" : change < 0 ? "down" : "same";
+        const badge = element("span", `rank-change ${state}`, label);
+        badge.setAttribute(
+          "aria-label",
+          change > 0 ? `${change}계단 상승` : change < 0 ? `${-change}계단 하락` : "순위 유지",
+        );
+        rankBlock.append(badge);
+      }
       const cover = element("span", "cover", "♫");
       cover.style.setProperty(
         "--cover",
@@ -86,7 +103,7 @@ async function load() {
         element("span", "", "이 들었어요"),
       );
       button.append(
-        rank,
+        rankBlock,
         cover,
         name,
         listeners,
