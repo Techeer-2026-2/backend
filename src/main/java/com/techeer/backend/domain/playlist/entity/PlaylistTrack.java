@@ -32,9 +32,15 @@ public class PlaylistTrack extends BaseEntity {
     @JoinColumn(name = "track_id", nullable = false)
     private Track track;
 
+    private Integer trackOrder;
+
     @Builder
     private PlaylistTrack(Playlist playlist, Track track) {
         this.playlist = playlist;
         this.track = track;
+    }
+
+    public void updateOrder(int trackOrder) {
+        this.trackOrder = trackOrder;
     }
 }
