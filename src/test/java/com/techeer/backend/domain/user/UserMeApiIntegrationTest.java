@@ -106,6 +106,21 @@ class UserMeApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("앞뒤 공백을 지운 값이 50자 이하이면 공백 때문에 거절하지 않는다")
+    void patchMeAcceptsPaddedNicknameWithinLimit() throws Exception {
+        signup("listener@techeer.com", "출근러");
+        String accessToken = loginAccessToken("listener@techeer.com");
+        String nickname = "가".repeat(49);
+
+        mockMvc.perform(patch(ME).header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(Map.of("nickname", "  " + nickname + "  "))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nickname").value(nickname));
+        assertThat(jdbcTemplate.queryForObject("select nickname from users", String.class)).isEqualTo(nickname);
+    }
+
+    @Test
     @DisplayName("이메일·비밀번호는 이 요청으로 바꿀 수 없다 (보내도 무시된다)")
     void patchMeIgnoresOtherFields() throws Exception {
         signup("listener@techeer.com", "출근러");

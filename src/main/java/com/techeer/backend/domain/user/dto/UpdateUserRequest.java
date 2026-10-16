@@ -13,4 +13,12 @@ public record UpdateUserRequest(
         @NotBlank
         @Size(max = 50)
         String nickname) {
+
+    /**
+     * 검증은 이 생성자가 끝난 뒤의 값에 실행되므로 앞뒤 공백을 먼저 지워 둔다.
+     * 지우지 않으면 앞뒤 공백 때문에 50자를 넘는 것으로 판정되어, 실제로 저장할 값이 50자 이하인데도 400 이 된다.
+     */
+    public UpdateUserRequest {
+        nickname = nickname == null ? null : nickname.trim();
+    }
 }

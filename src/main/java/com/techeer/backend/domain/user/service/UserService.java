@@ -35,7 +35,7 @@ public class UserService {
     @Transactional
     public UserResponse updateMe(Long userId, UpdateUserRequest request) {
         User user = findActive(userId);
-        user.changeNickname(request.nickname().trim());
+        user.changeNickname(request.nickname());
         return UserResponse.from(user);
     }
 
