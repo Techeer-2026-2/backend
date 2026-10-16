@@ -14,6 +14,7 @@ import jakarta.persistence.Table;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -42,6 +43,10 @@ public class Playlist extends BaseEntity {
     @Column(nullable = false, length = 20, columnDefinition = "varchar(20) default 'USER_CREATED'")
     private PlaylistType type = PlaylistType.USER_CREATED;
 
+    /** 공유 링크 토큰. 공유 중일 때만 값이 있고(UUID), 공유를 취소하면 null 로 돌아간다. */
+    @Column(unique = true, length = 36)
+    private String shareToken;
+
     @OneToMany(mappedBy = "playlist", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PlaylistTrack> tracks = new ArrayList<>();
 
@@ -57,6 +62,19 @@ public class Playlist extends BaseEntity {
         this.name = name;
         this.description = description;
         this.isPublic = isPublic;
+    }
+
+    /** 공유 토큰을 만든다. 이미 공유 중이면 기존 토큰을 그대로 돌려준다(멱등). */
+    public String share() {
+        if (shareToken == null) {
+            shareToken = UUID.randomUUID().toString();
+        }
+        return shareToken;
+    }
+
+    /** 공유를 취소한다. 이전 토큰으로는 더 이상 조회할 수 없다. */
+    public void revokeShare() {
+        this.shareToken = null;
     }
 
     /** 담긴 곡들의 재생시간 합계(초). 재생시간을 모르는 곡은 0초로 친다. */
