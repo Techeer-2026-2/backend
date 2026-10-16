@@ -40,6 +40,15 @@ public final class PlaylistRecommender {
 
     public static List<Track> select(List<Candidate> candidates, Map<TrackMood, Double> weights, int size,
             RandomGenerator random) {
+        return select(candidates, weights, size, random, NearbyPopularity.none());
+    }
+
+    /**
+     * 주변 인기곡 가산점을 반영해 고른다. 후보인지 여부(최소 적합도)는 분위기 적합도만으로 정하고, 가산점은 후보 안에서
+     * 뽑힐 확률만 높인다. 그래서 분위기에 맞지 않는 인기곡은 들어오지 못한다.
+     */
+    public static List<Track> select(List<Candidate> candidates, Map<TrackMood, Double> weights, int size,
+            RandomGenerator random, NearbyPopularity popularity) {
         // Efraimidis–Spirakis 가중 무작위 추출: 키 = u^(1/가중치). 키가 큰 순서대로 뽑으면 가중치가 클수록 앞에 올 확률이 높다.
         record Keyed(Track track, double key) {
         }
@@ -49,8 +58,9 @@ public final class PlaylistRecommender {
             if (r < MIN_RELEVANCE) {
                 continue;
             }
+            double boosted = r * (1.0 + popularity.boostOf(c.track().getItunesTrackId()));
             double u = 1.0 - random.nextDouble(); // (0, 1]
-            keyed.add(new Keyed(c.track(), Math.pow(u, 1.0 / (r * r))));
+            keyed.add(new Keyed(c.track(), Math.pow(u, 1.0 / (boosted * boosted))));
         }
         keyed.sort((a, b) -> Double.compare(b.key(), a.key()));
 

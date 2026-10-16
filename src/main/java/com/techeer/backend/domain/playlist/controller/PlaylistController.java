@@ -47,7 +47,9 @@ public class PlaylistController {
     }
 
     @Operation(summary = "날씨·시간대 기반 플레이리스트 자동 생성",
-            description = "통근 프로필의 출발지 날씨, 현재 시간대, 출근/퇴근 구분으로 곡을 골라 COMMUTE_GENERATED 플레이리스트를 만듭니다.")
+            description = "통근 프로필의 출발지 날씨, 현재 시간대, 출근/퇴근 구분으로 곡을 골라 COMMUTE_GENERATED 플레이리스트를 만듭니다. "
+                    + "latitude·longitude 를 함께 보내면 그 위치 주변의 인기곡(랭킹)에 가산점을 주고, 없으면 통근 프로필 출발지를 씁니다. "
+                    + "응답 context.popularity 에서 반영 여부와 차트 범위를 확인할 수 있습니다.")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/generate")
     public PlaylistGenerateResponse generate(

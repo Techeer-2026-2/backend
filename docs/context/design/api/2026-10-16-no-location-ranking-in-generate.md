@@ -2,7 +2,7 @@
 id: 2026-10-16-no-location-ranking-in-generate
 title: 주변 랭킹(위치 기반) 가산점은 플레이리스트 자동 생성에 넣지 않는다
 zone: design
-status: 제안
+status: 대체됨
 recorder: kmssss56
 ai: Claude
 recorded: 2026-10-16
@@ -28,3 +28,5 @@ summary: 위치는 날씨 조회에만 쓰고, 주변 인기곡 가산점은 랭
 
 ## 되돌릴 조건
 랭킹과 곡 저장소의 ID 연결이 정해지면 `RecommendationService`에서 후보 적합도에 인기 가산점을 더하는 이슈를 만든다.
+
+대체: `2026-10-16-location-popularity-boost` (#104). ID 연결 합의를 기다리지 않고 두 형식을 모두 받는 방식으로 구현했다.
