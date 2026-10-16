@@ -63,6 +63,12 @@ public enum ErrorCode {
     // 외부 API (카카오·TMAP·iTunes 등)
     EXTERNAL_API_ERROR(HttpStatus.BAD_GATEWAY, "외부 API 호출에 실패했습니다."),
 
+    // 음악 앱 통근 세션
+    COMMUTE_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않거나 진행 중인 통근이 없습니다."),
+    COMMUTE_SESSION_ALREADY_ACTIVE(HttpStatus.CONFLICT, "이미 진행 중인 통근이 있습니다."),
+    COMMUTE_SESSION_NOT_ACTIVE(HttpStatus.CONFLICT, "진행 중인 통근이 아닙니다."),
+    COMMUTE_SESSION_EVENT_CONFLICT(HttpStatus.CONFLICT, "이미 사용된 이벤트 ID 의 내용이 다릅니다."),
+
     // 음악 앱 통근 프로필
     COMMUTE_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 통근 프로필입니다."),
     ;

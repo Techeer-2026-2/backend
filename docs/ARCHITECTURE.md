@@ -248,6 +248,29 @@ CREATE TABLE playlist_active_listening (  -- 공유 플레이리스트를 지금
     heartbeat_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE commute_session (  -- 통근 한 번의 기록. 회원당 진행 중(ACTIVE)인 통근은 1개
+    commute_session_id BIGINT PRIMARY KEY,
+    member_id BIGINT NOT NULL,
+    commute_profile_id BIGINT NOT NULL,
+    playlist_id BIGINT,
+    status VARCHAR(20) NOT NULL,  -- ACTIVE | COMPLETED | CANCELED
+    started_at TIMESTAMP NOT NULL,
+    ended_at TIMESTAMP,
+    expected_duration_minutes INT,  -- 시작할 때 프로필 경로에서 가져온 예상 소요시간
+    active_member_id BIGINT UNIQUE,  -- 진행 중일 때만 member_id, 끝나면 NULL. 회원당 활성 1개를 DB 가 보장
+    created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
+);
+
+CREATE TABLE commute_session_event (  -- 통근 중 재생 이벤트. event_id 로 중복 방지
+    commute_session_event_id BIGINT PRIMARY KEY,
+    event_id UUID NOT NULL UNIQUE,
+    session_id BIGINT NOT NULL,
+    itunes_track_id BIGINT NOT NULL,
+    action_type VARCHAR(10) NOT NULL,  -- PLAY | SKIP | REPEAT
+    played_seconds INT,
+    created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
+);
+
 CREATE TABLE playback_event (  -- 재생 이벤트(PLAY/SKIP/REPEAT). 주변 인기곡 집계(popular_track_ranking)의 원본
     playback_event_id BIGINT PRIMARY KEY,
     user_id BIGINT REFERENCES users(user_id),
