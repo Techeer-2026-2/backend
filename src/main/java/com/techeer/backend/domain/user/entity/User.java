@@ -61,4 +61,11 @@ public class User extends BaseEntity {
     public void changeRefreshTokenHash(String refreshTokenHash) {
         this.refreshTokenHash = refreshTokenHash;
     }
+
+    /**
+     * 닉네임을 바꾼다. 이메일·비밀번호 같은 다른 값은 이 메서드로 바꿀 수 없다.
+     */
+    public void changeNickname(String nickname) {
+        this.nickname = nickname;
+    }
 }

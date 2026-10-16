@@ -62,6 +62,12 @@ jwt:
   access-token-minutes: 30
   refresh-token-days: 14
 
+# ---------- 음악 앱 회원 식별 ----------
+auth:
+  # true 이면 Authorization: Bearer 토큰이 없는 요청에 한해 X-Member-Id 헤더를 임시로 신뢰한다(프론트 로그인 전환 전용).
+  # 프론트가 로그인 토큰으로 전환하면 AUTH_LEGACY_MEMBER_HEADER=false 로 끈다. 끄면 토큰이 없는 요청은 401 이다.
+  legacy-member-header: ${AUTH_LEGACY_MEMBER_HEADER:true}
+
 # ---------- CORS ----------
 cors:
   # 브라우저에서 API 를 호출해도 되는 프론트 주소(쉼표로 구분). 기본값은 로컬 Vite 개발 서버.
