@@ -8,6 +8,7 @@ import com.techeer.backend.domain.playlist.dto.PlaylistUpdateRequest;
 import com.techeer.backend.domain.playlist.dto.TrackOrderUpdateRequest;
 import com.techeer.backend.domain.playlist.entity.Playlist;
 import com.techeer.backend.domain.playlist.entity.PlaylistTrack;
+import com.techeer.backend.domain.playlist.entity.PlaylistType;
 import com.techeer.backend.domain.playlist.entity.Track;
 import com.techeer.backend.domain.playlist.repository.PlaylistRepository;
 import com.techeer.backend.domain.playlist.repository.TrackRepository;
@@ -15,6 +16,7 @@ import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +43,25 @@ public class PlaylistService {
                 .name(request.name())
                 .build();
         return PlaylistResponse.from(playlistRepository.save(playlist));
+    }
+
+    /** 서버가 추천으로 고른 곡들로 플레이리스트를 만든다. trackIds 의 순서가 곧 곡 순서(trackOrder)가 된다. */
+    @Transactional
+    public PlaylistDetailResponse createGenerated(Long memberId, String name, List<Long> trackIds) {
+        Map<Long, Track> byId = trackRepository.findAllById(trackIds).stream()
+                .collect(Collectors.toMap(Track::getId, Function.identity()));
+        Playlist playlist = Playlist.builder()
+                .memberId(memberId)
+                .name(name)
+                .type(PlaylistType.COMMUTE_GENERATED)
+                .build();
+        List<Track> ordered = trackIds.stream().map(byId::get).filter(Objects::nonNull).toList();
+        for (int i = 0; i < ordered.size(); i++) {
+            PlaylistTrack playlistTrack = PlaylistTrack.builder().playlist(playlist).track(ordered.get(i)).build();
+            playlistTrack.updateOrder(i);
+            playlist.getTracks().add(playlistTrack);
+        }
+        return PlaylistDetailResponse.from(playlistRepository.save(playlist));
     }
 
     @Transactional

@@ -185,6 +185,7 @@ CREATE TABLE playlist (  -- 사용자 직접 생성(USER_CREATED) 또는 서버 
     description VARCHAR(500),
     is_public BOOLEAN DEFAULT TRUE,
     total_duration_sec INT,
+    type VARCHAR(20) NOT NULL DEFAULT 'USER_CREATED',  -- USER_CREATED | COMMUTE_GENERATED
     created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
 );
 
@@ -199,6 +200,16 @@ CREATE TABLE track (  -- 곡 자체 정보. 여러 플레이리스트에서 재�
     preview_url VARCHAR(500),
     track_time_millis INT,
     created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
+);
+
+CREATE TABLE track_mood (  -- 곡의 분위기 점수. 한 곡에 여러 분위기가 붙는다 (날씨·시간대 추천의 후보 선정에 사용)
+    track_mood_id BIGINT PRIMARY KEY,
+    track_id BIGINT NOT NULL REFERENCES track(track_id),
+    mood VARCHAR(20) NOT NULL,  -- GLOOMY | CALM | UPBEAT | ENERGETIC | FOCUS | ROMANTIC | NOSTALGIC | DREAMY
+    score DOUBLE PRECISION NOT NULL,  -- 0~1, 클수록 그 분위기에 잘 맞음
+    source VARCHAR(20) NOT NULL,  -- KEYWORD(수집할 때 검색어만 반영) | SCORED(여러 신호를 합산한 최종 값)
+    created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP,
+    UNIQUE (track_id, mood)
 );
 
 CREATE TABLE playlist_track (  -- 플레이리스트-곡 연결 테이블(N:M)

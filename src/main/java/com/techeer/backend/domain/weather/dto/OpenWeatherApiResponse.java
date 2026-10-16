@@ -8,9 +8,14 @@ import java.util.List;
  * {@link com.techeer.backend.domain.weather.WeatherCondition}으로 변환해서 내보낸다.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record OpenWeatherApiResponse(List<Weather> weather) {
+public record OpenWeatherApiResponse(List<Weather> weather, Main main) {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Weather(String main) {
+    }
+
+    /** temp 는 단위를 지정하지 않았을 때 켈빈(K)이다. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Main(Double temp) {
     }
 }

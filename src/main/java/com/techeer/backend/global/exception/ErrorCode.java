@@ -54,6 +54,7 @@ public enum ErrorCode {
     PLAYBACK_CONFLICT(HttpStatus.CONFLICT, "이미 사용된 이벤트 또는 세션 ID의 내용이 다릅니다."),
 
     // 음악 앱 플레이리스트
+    PLAYLIST_GENERATE_NO_CANDIDATES(HttpStatus.NOT_FOUND, "추천할 곡을 찾지 못했습니다."),
     PLAYLIST_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 플레이리스트입니다."),
     PLAYLIST_TRACK_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 트랙입니다."),
 
