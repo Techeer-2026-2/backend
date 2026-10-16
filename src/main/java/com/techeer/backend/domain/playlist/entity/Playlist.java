@@ -29,12 +29,23 @@ public class Playlist extends BaseEntity {
 
     private String name;
 
+    private String description;
+
+    private Boolean isPublic;
+
     @OneToMany(mappedBy = "playlist", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PlaylistTrack> tracks = new ArrayList<>();
 
     @Builder
-    private Playlist(Long memberId, String name) {
+    private Playlist(Long memberId, String name, Boolean isPublic) {
         this.memberId = memberId;
         this.name = name;
+        this.isPublic = isPublic != null ? isPublic : true;
+    }
+
+    public void update(String name, String description, Boolean isPublic) {
+        this.name = name;
+        this.description = description;
+        this.isPublic = isPublic;
     }
 }

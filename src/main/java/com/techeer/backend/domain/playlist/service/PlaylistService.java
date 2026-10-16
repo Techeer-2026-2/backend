@@ -4,6 +4,8 @@ import com.techeer.backend.domain.playlist.dto.PlaylistCreateRequest;
 import com.techeer.backend.domain.playlist.dto.PlaylistDetailResponse;
 import com.techeer.backend.domain.playlist.dto.PlaylistResponse;
 import com.techeer.backend.domain.playlist.dto.PlaylistTrackAddRequest;
+import com.techeer.backend.domain.playlist.dto.PlaylistUpdateRequest;
+import com.techeer.backend.domain.playlist.dto.TrackOrderUpdateRequest;
 import com.techeer.backend.domain.playlist.entity.Playlist;
 import com.techeer.backend.domain.playlist.entity.PlaylistTrack;
 import com.techeer.backend.domain.playlist.entity.Track;
@@ -12,6 +14,9 @@ import com.techeer.backend.domain.playlist.repository.TrackRepository;
 import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -36,6 +41,16 @@ public class PlaylistService {
                 .name(request.name())
                 .build();
         return PlaylistResponse.from(playlistRepository.save(playlist));
+    }
+
+    @Transactional
+    public PlaylistResponse update(Long memberId, Long playlistId, PlaylistUpdateRequest request) {
+        Playlist playlist = findOwnedOrThrow(memberId, playlistId);
+        String name = request.name() != null ? request.name() : playlist.getName();
+        String description = request.description() != null ? request.description() : playlist.getDescription();
+        Boolean isPublic = request.isPublic() != null ? request.isPublic() : playlist.getIsPublic();
+        playlist.update(name, description, isPublic);
+        return PlaylistResponse.from(playlist);
     }
 
     public List<PlaylistResponse> findAll(Long memberId) {
@@ -94,6 +109,27 @@ public class PlaylistService {
                 .previewUrl(request.previewUrl())
                 .trackTimeMillis(request.trackTimeMillis())
                 .build()));
+    }
+
+    @Transactional
+    public void updateTrackOrder(Long memberId, Long playlistId, TrackOrderUpdateRequest request) {
+        Playlist playlist = findOwnedOrThrow(memberId, playlistId);
+        Map<Long, PlaylistTrack> tracksById = playlist.getTracks().stream()
+                .collect(Collectors.toMap(PlaylistTrack::getId, Function.identity()));
+
+        List<Long> orderedIds = request.playlistTrackIds();
+        long distinctCount = orderedIds.stream().distinct().count();
+        if (orderedIds.size() != tracksById.size() || distinctCount != orderedIds.size()) {
+            throw new BusinessException(ErrorCode.PLAYLIST_TRACK_NOT_FOUND);
+        }
+
+        for (int i = 0; i < orderedIds.size(); i++) {
+            PlaylistTrack track = tracksById.get(orderedIds.get(i));
+            if (track == null) {
+                throw new BusinessException(ErrorCode.PLAYLIST_TRACK_NOT_FOUND);
+            }
+            track.updateOrder(i);
+        }
     }
 
     @Transactional
