@@ -17,6 +17,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmailAndDeletedAtIsNull(String email);
 
     /**
+     * 탈퇴(soft delete)하지 않은 회원만 ID 로 조회한다. 내 정보 조회·수정에 쓴다.
+     */
+    Optional<User> findByUserIdAndDeletedAtIsNull(Long userId);
+
+    /**
      * 저장된 refresh token 해시가 oldHash 와 같을 때만 newHash 로 바꾼다. 바뀐 행 수(0 또는 1)를 돌려준다.
      *
      * <p>"읽어서 비교하고 쓰는" 두 단계 대신 DB 에서 비교와 교체를 한 번에 하므로, 같은 refresh token 으로

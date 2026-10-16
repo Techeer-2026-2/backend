@@ -45,6 +45,7 @@ public enum ErrorCode {
     IMPRESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 알림(notification_id)입니다."),
 
     // 음악 앱 회원 식별
+    USER_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않거나 탈퇴한 회원입니다."),
     MISSING_MEMBER_ID(HttpStatus.BAD_REQUEST, "X-Member-Id 헤더가 필요합니다."),
     INVALID_MEMBER_ID(HttpStatus.BAD_REQUEST, "X-Member-Id 헤더 값이 올바르지 않습니다."),
 
