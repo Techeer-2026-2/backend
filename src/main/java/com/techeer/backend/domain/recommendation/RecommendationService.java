@@ -56,6 +56,7 @@ public class RecommendationService {
     private final PlaylistService playlistService;
     private final RunningTimeAdjuster runningTimeAdjuster;
     private final WeatherService weatherService;
+    private final NearbyPopularityProvider popularityProvider;
     private final Clock clock;
     private final RandomGenerator random;
 
@@ -71,10 +72,12 @@ public class RecommendationService {
         Map<TrackMood, Double> weights = MoodRules.weights(context);
 
         List<Candidate> candidates = loadCandidates(weights);
+        NearbyPopularity popularity = effectivePopularity(
+                findPopularity(request, profile.getDeparture()), candidates, weights);
         Integer targetMinutes = request.size() == null ? commuteMinutesOrNull(profile) : null;
         List<Track> selected = targetMinutes == null
-                ? PlaylistRecommender.select(candidates, weights, sizeOrDefault(request), random)
-                : selectForRunningTime(candidates, weights, targetMinutes);
+                ? PlaylistRecommender.select(candidates, weights, sizeOrDefault(request), random, popularity)
+                : selectForRunningTime(candidates, weights, targetMinutes, popularity);
         if (selected.isEmpty()) {
             throw new BusinessException(ErrorCode.PLAYLIST_GENERATE_NO_CANDIDATES);
         }
@@ -82,7 +85,40 @@ public class RecommendationService {
         String name = request.name() != null && !request.name().isBlank() ? request.name() : defaultName(context);
         PlaylistDetailResponse playlist = playlistService.createGenerated(
                 memberId, name, selected.stream().map(Track::getId).toList());
-        return PlaylistGenerateResponse.of(playlist, context, topMoods(weights));
+        long boosted = selected.stream().filter(t -> popularity.boostOf(t.getItunesTrackId()) > 0).count();
+        return PlaylistGenerateResponse.of(playlist, context, topMoods(weights),
+                new PlaylistGenerateResponse.Popularity(
+                        popularity.applied(), popularity.scope(), popularity.locationLabel(), (int) boosted));
+    }
+
+    /**
+     * 가산점이 이번 추천에 실제로 쓰일 수 있는지 가려, 쓰일 수 없으면 "반영 안 함"으로 바꾼다.
+     * 차트에 연결 가능한 곡이 있어도 그 곡들이 이번 후보에 없거나 후보 자격(최소 적합도)에 못 미치면 아무 영향이 없으므로,
+     * 응답이 반영했다고 알리지 않도록 후보 안에서 가산점을 받는 곡이 있는지 확인한다.
+     */
+    private static NearbyPopularity effectivePopularity(
+            NearbyPopularity popularity, List<Candidate> candidates, Map<TrackMood, Double> weights) {
+        boolean usable = popularity.applied() && candidates.stream().anyMatch(c ->
+                PlaylistRecommender.relevance(c, weights) >= PlaylistRecommender.MIN_RELEVANCE
+                        && popularity.boostOf(c.track().getItunesTrackId()) > 0);
+        return usable ? popularity : NearbyPopularity.none();
+    }
+
+    /**
+     * 주변 인기곡 가산점의 기준 위치를 정한다. 요청에 위치가 있으면 그것을, 없으면 통근 프로필 출발지를 쓴다.
+     * 위도·경도 중 하나만 보내면 어느 쪽 위치인지 알 수 없으므로 거절한다.
+     */
+    private NearbyPopularity findPopularity(PlaylistGenerateRequest request, Location departure) {
+        if ((request.latitude() == null) != (request.longitude() == null)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+        if (request.latitude() != null) {
+            return popularityProvider.find(request.latitude(), request.longitude());
+        }
+        if (departure == null || departure.getLatitude() == null || departure.getLongitude() == null) {
+            return NearbyPopularity.none();
+        }
+        return popularityProvider.find(departure.getLatitude(), departure.getLongitude());
     }
 
     private static int sizeOrDefault(PlaylistGenerateRequest request) {
@@ -104,20 +140,21 @@ public class RecommendationService {
      * 재생시간을 아는 후보가 없어 시간을 못 맞추면 기본 곡 수로 만든다.
      */
     private List<Track> selectForRunningTime(List<Candidate> candidates, Map<TrackMood, Double> weights,
-            int targetMinutes) {
+            int targetMinutes, NearbyPopularity popularity) {
         OptionalDouble averageMillis = candidates.stream()
                 .map(c -> c.track().getTrackTimeMillis())
                 .filter(millis -> millis != null && millis > 0)
                 .mapToInt(Integer::intValue)
                 .average();
         if (averageMillis.isEmpty()) {
-            return PlaylistRecommender.select(candidates, weights, DEFAULT_SIZE, random);
+            return PlaylistRecommender.select(candidates, weights, DEFAULT_SIZE, random, popularity);
         }
         int estimated = (int) Math.ceil(targetMinutes * 60_000.0 / averageMillis.getAsDouble());
         int poolSize = Math.min(estimated + RUNNING_TIME_POOL_SLACK, RunningTimeAdjuster.MAX_TRACKS);
         List<Track> fitted = runningTimeAdjuster.fit(
-                PlaylistRecommender.select(candidates, weights, poolSize, random), targetMinutes);
-        return fitted.isEmpty() ? PlaylistRecommender.select(candidates, weights, DEFAULT_SIZE, random) : fitted;
+                PlaylistRecommender.select(candidates, weights, poolSize, random, popularity), targetMinutes);
+        return fitted.isEmpty()
+                ? PlaylistRecommender.select(candidates, weights, DEFAULT_SIZE, random, popularity) : fitted;
     }
 
     /** 날씨를 못 가져와도 추천은 한다 (시간대와 통근 구분만으로). */

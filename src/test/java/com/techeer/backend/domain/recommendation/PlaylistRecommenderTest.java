@@ -147,4 +147,55 @@ class PlaylistRecommenderTest {
     void 후보가_없으면_빈_목록을_돌려준다() {
         assertThat(PlaylistRecommender.select(List.of(), RAIN, 10, RandomGenerator.of("L64X128MixRandom"))).isEmpty();
     }
+
+    @Test
+    void 주변_인기곡_가산점이_있으면_같은_적합도의_곡_중_그_곡이_더_자주_뽑힌다() {
+        List<Candidate> pool = List.of(
+                candidate(1, "a", TrackMood.GLOOMY, 0.8),
+                candidate(2, "b", TrackMood.GLOOMY, 0.8));
+        NearbyPopularity popular = new NearbyPopularity(Map.of(1L, 0.5), "NEARBY", "성수동 주변");
+        RandomGenerator random = RandomGenerator.of("L64X128MixRandom");
+
+        int popularWins = 0;
+        int plainWins = 0;
+        for (int i = 0; i < 2000; i++) {
+            popularWins += ids(PlaylistRecommender.select(pool, RAIN, 1, random, popular)).contains(1L) ? 1 : 0;
+            plainWins += ids(PlaylistRecommender.select(pool, RAIN, 1, random)).contains(1L) ? 1 : 0;
+        }
+
+        // 가산점 0.5 → 적합도 1.5배 → 뽑힐 몫은 1.5² : 1 = 69% 근처. 가산점이 없으면 50% 근처.
+        assertThat(popularWins / 2000.0).isBetween(0.62, 0.76);
+        assertThat(plainWins / 2000.0).isBetween(0.44, 0.56);
+    }
+
+    @Test
+    void 분위기에_맞지_않는_인기곡은_가산점이_커도_뽑히지_않는다() {
+        List<Candidate> pool = List.of(
+                candidate(1, "a", TrackMood.GLOOMY, 0.9),
+                candidate(2, "b", TrackMood.ENERGETIC, 1.0),   // 비 오는 날 가중치가 없는 분위기
+                candidate(3, "c", TrackMood.GLOOMY, 0.02));    // 적합도가 0 은 아니지만 기준(0.05)에 못 미침
+        NearbyPopularity popular = new NearbyPopularity(Map.of(2L, 100.0, 3L, 100.0), "NEARBY", "성수동 주변");
+
+        List<Track> picked = PlaylistRecommender.select(
+                pool, RAIN, 5, RandomGenerator.of("L64X128MixRandom"), popular);
+
+        assertThat(ids(picked)).containsExactly(1L);
+    }
+
+    @Test
+    void 가산점이_있어도_가수_장르_제한은_그대로_적용된다() {
+        List<Candidate> pool = new ArrayList<>();
+        for (long i = 1; i <= 10; i++) {
+            pool.add(candidate(i, "같은가수", TrackMood.GLOOMY, 0.9));
+        }
+        Map<Long, Double> boosts = new java.util.HashMap<>();
+        for (long i = 1; i <= 10; i++) {
+            boosts.put(i, 0.5);
+        }
+
+        List<Track> picked = PlaylistRecommender.select(pool, RAIN, 8, RandomGenerator.of("L64X128MixRandom"),
+                new NearbyPopularity(boosts, "NEARBY", "x"));
+
+        assertThat(picked).hasSize(PlaylistRecommender.MAX_PER_ARTIST);
+    }
 }
