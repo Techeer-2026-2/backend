@@ -119,6 +119,21 @@ class CampaignApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("타겟 목록에 null 이나 허용되지 않은 값이 있으면 400 을 돌려준다")
+    void rejectsInvalidTargetValues() throws Exception {
+        String base = campaignJson(daysFromNow(1), daysFromNow(3), "null");
+        String nullAge = base.replace("\"targetAgeGroups\": [\"20s\"]", "\"targetAgeGroups\": [null]");
+        String badGender = base.replace("\"targetGenders\": [\"all\"]", "\"targetGenders\": [\"other\"]");
+
+        mockMvc.perform(createRequest(USER_ID, nullAge))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+        mockMvc.perform(createRequest(USER_ID, badGender))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
     @DisplayName("필수 값이 빠지면 400 을 돌려준다")
     void rejectsMissingRequiredFields() throws Exception {
         mockMvc.perform(createRequest(USER_ID, "{\"title\": \"OOO 컴백 D-3\"}"))

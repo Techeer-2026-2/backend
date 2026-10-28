@@ -38,7 +38,7 @@ public final class CampaignTargetRules {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
         for (String ageGroup : ageGroups) {
-            if (!AGE_GROUPS.contains(ageGroup)) {
+            if (ageGroup == null || !AGE_GROUPS.contains(ageGroup)) {
                 throw new BusinessException(ErrorCode.INVALID_INPUT);
             }
         }
@@ -52,7 +52,7 @@ public final class CampaignTargetRules {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
         for (String gender : genders) {
-            if (!GENDERS.contains(gender)) {
+            if (gender == null || !GENDERS.contains(gender)) {
                 throw new BusinessException(ErrorCode.INVALID_INPUT);
             }
         }
