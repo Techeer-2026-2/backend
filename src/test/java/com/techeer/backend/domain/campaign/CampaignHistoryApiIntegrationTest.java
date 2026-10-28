@@ -1,5 +1,6 @@
 package com.techeer.backend.domain.campaign;
 
+import java.util.Set;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -249,7 +250,7 @@ class CampaignHistoryApiIntegrationTest {
         return campaignRepository.save(Campaign.builder()
                 .userId(owner.getUserId())
                 .title(title)
-                .targetAgeGroup("20s")
+                .ageGroups(Set.of("20s")).genders(Set.of("all"))
                 .timeStart(now.minusDays(10))
                 .timeEnd(timeEnd)
                 .status(status)
