@@ -1,5 +1,6 @@
 package com.techeer.backend.domain.banner;
 
+import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -174,14 +175,47 @@ class BannerApiIntegrationTest {
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
     }
 
-    private TargetUser saveUser(String ageGroup) {
+    @Test
+    @DisplayName("유저 성별이 캠페인 성별 목록에 없으면 노출하지 않는다")
+    void doesNotMatchWhenGenderDiffers() throws Exception {
+        TargetUser maleUser = saveUser(AGE_20S, "M");
+        saveTargetedCampaign(Set.of(AGE_20S), Set.of("female"), daysFromNow(-1), daysFromNow(1));
+
+        mockMvc.perform(matchRequest(maleUser.getTargetUserId()))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @DisplayName("성별이 all 이면 성별과 상관없이 노출한다")
+    void allGenderMatchesAnyUser() throws Exception {
+        TargetUser maleUser = saveUser(AGE_20S, "M");
+        Campaign campaign = saveTargetedCampaign(Set.of(AGE_20S), Set.of("all"), daysFromNow(-1), daysFromNow(1));
+
+        mockMvc.perform(matchRequest(maleUser.getTargetUserId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.campaignId").value(campaign.getCampaignId()));
+    }
+
+    @Test
+    @DisplayName("연령대 목록 중 하나와 맞고 성별도 맞으면 노출한다")
+    void matchesWhenAgeIsOneOfSeveralAndGenderMatches() throws Exception {
+        TargetUser user = saveUser(AGE_30S, "F");
+        Campaign campaign = saveTargetedCampaign(Set.of(AGE_20S, AGE_30S), Set.of("female"),
+                daysFromNow(-1), daysFromNow(1));
+
+        mockMvc.perform(matchRequest(user.getTargetUserId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.campaignId").value(campaign.getCampaignId()));
+    }
+
+    private TargetUser saveUser(String ageGroup, String gender) {
         return targetUserRepository.save(TargetUser.builder()
                 .ageGroup(ageGroup)
-                .gender("F")
+                .gender(gender)
                 .build());
     }
 
-    private Campaign saveCampaign(String targetAgeGroup, CampaignStatus status,
+    private Campaign saveTargetedCampaign(Set<String> ageGroups, Set<String> genders,
             LocalDateTime timeStart, LocalDateTime timeEnd) {
         return campaignRepository.save(Campaign.builder()
                 .userId(1L)
@@ -189,7 +223,30 @@ class BannerApiIntegrationTest {
                 .body("오전 9시 전 주문 시 1+1")
                 .imageUrl("https://example.com/banner.png")
                 .linkUrl("https://example.com/coffee")
-                .targetAgeGroup(targetAgeGroup)
+                .ageGroups(ageGroups)
+                .genders(genders)
+                .timeStart(timeStart)
+                .timeEnd(timeEnd)
+                .status(CampaignStatus.ACTIVE)
+                .build());
+    }
+
+    private TargetUser saveUser(String ageGroup) {
+        return targetUserRepository.save(TargetUser.builder()
+                .ageGroup(ageGroup)
+                .gender("F")
+                .build());
+    }
+
+    private Campaign saveCampaign(String ageGroup, CampaignStatus status,
+            LocalDateTime timeStart, LocalDateTime timeEnd) {
+        return campaignRepository.save(Campaign.builder()
+                .userId(1L)
+                .title("출근길 커피 1+1")
+                .body("오전 9시 전 주문 시 1+1")
+                .imageUrl("https://example.com/banner.png")
+                .linkUrl("https://example.com/coffee")
+                .ageGroups(Set.of(ageGroup)).genders(Set.of("all"))
                 .timeStart(timeStart)
                 .timeEnd(timeEnd)
                 .status(status)

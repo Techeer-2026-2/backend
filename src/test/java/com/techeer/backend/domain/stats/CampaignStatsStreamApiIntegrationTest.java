@@ -1,5 +1,6 @@
 package com.techeer.backend.domain.stats;
 
+import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.techeer.backend.TestcontainersConfiguration;
@@ -15,6 +16,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Clock;
 import java.time.LocalDateTime;
+
 import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
@@ -286,7 +288,7 @@ class CampaignStatsStreamApiIntegrationTest {
                 .userId(1L)
                 .title("출근길 커피 1+1")
                 .body("오전 9시 전 주문 시 1+1")
-                .targetAgeGroup("20s")
+                .ageGroups(Set.of("20s")).genders(Set.of("all"))
                 .status(CampaignStatus.ACTIVE)
                 .build());
     }

@@ -1,5 +1,6 @@
 package com.techeer.backend.domain.campaign;
 
+import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -15,6 +16,7 @@ import com.techeer.backend.domain.campaign.repository.CampaignRepository;
 import com.techeer.backend.domain.stats.repository.CampaignStatsRepository;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -162,14 +164,14 @@ class CampaignDetailApiIntegrationTest {
                           "body": "바뀐 본문",
                           "imageUrl": "https://example.com/banner-v2.png",
                           "linkUrl": "https://example.com/new",
-                          "targetAgeGroup": "30s",
+                          "targetAgeGroups": ["30s"], "targetGenders": ["all"],
                           "startAt": "%s",
                           "endAt": "%s"
                         }
                         """.formatted(startAt, endAt)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("바뀐 제목"))
-                .andExpect(jsonPath("$.targetAgeGroup").value("30s"))
+                .andExpect(jsonPath("$.targetAgeGroups[0]").value("30s"))
                 .andExpect(jsonPath("$.status").value("PENDING"));
 
         Campaign updated = reload(campaign);
@@ -177,7 +179,7 @@ class CampaignDetailApiIntegrationTest {
         assertThat(updated.getBody()).isEqualTo("바뀐 본문");
         assertThat(updated.getImageUrl()).isEqualTo("https://example.com/banner-v2.png");
         assertThat(updated.getLinkUrl()).isEqualTo("https://example.com/new");
-        assertThat(updated.getTargetAgeGroup()).isEqualTo("30s");
+        assertThat(updated.getAgeGroups()).containsExactly("30s");
         assertThat(updated.getTimeStart()).isEqualTo(startAt);
         assertThat(updated.getTimeEnd()).isEqualTo(endAt);
     }
@@ -218,7 +220,7 @@ class CampaignDetailApiIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CAMPAIGN_FIELD_NOT_EDITABLE"));
 
-        mockMvc.perform(patchRequest(campaign, USER_ID, "{\"targetAgeGroup\": \"30s\"}"))
+        mockMvc.perform(patchRequest(campaign, USER_ID, "{\"targetAgeGroups\": [\"30s\"]}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CAMPAIGN_FIELD_NOT_EDITABLE"));
 
@@ -226,7 +228,7 @@ class CampaignDetailApiIntegrationTest {
         assertThat(updated.getTitle()).isEqualTo("바뀐 제목");
         assertThat(updated.getBody()).isEqualTo("바뀐 본문");
         assertThat(updated.getImageUrl()).isEqualTo("https://example.com/banner-v2.png");
-        assertThat(updated.getTargetAgeGroup()).isEqualTo(campaign.getTargetAgeGroup());
+        assertThat(updated.getAgeGroups()).isEqualTo(campaign.getAgeGroups());
         assertThat(updated.getTimeEnd()).isEqualTo(campaign.getTimeEnd());
     }
 
@@ -256,14 +258,14 @@ class CampaignDetailApiIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
 
-        for (String field : List.of("title", "body", "imageUrl", "targetAgeGroup")) {
+        for (String field : List.of("title", "body", "imageUrl")) {
             mockMvc.perform(patchRequest(campaign, USER_ID, "{\"" + field + "\": \"   \"}"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
         }
 
         // 전각 공백(U+3000)만 담긴 값도 공백으로 본다.
-        for (String field : List.of("title", "body", "imageUrl", "targetAgeGroup")) {
+        for (String field : List.of("title", "body", "imageUrl")) {
             mockMvc.perform(patchRequest(campaign, USER_ID, "{\"" + field + "\": \"　\"}"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
@@ -360,7 +362,7 @@ class CampaignDetailApiIntegrationTest {
                 .body("10월 10일 오후 6시 신곡 공개")
                 .imageUrl("https://example.com/banner.png")
                 .linkUrl("https://example.com/comeback")
-                .targetAgeGroup("20s")
+                .ageGroups(Set.of("20s")).genders(Set.of("all"))
                 .timeStart(timeStart)
                 .timeEnd(timeEnd)
                 .status(CampaignStatus.ACTIVE)
