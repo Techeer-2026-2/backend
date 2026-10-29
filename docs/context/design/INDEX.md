@@ -10,3 +10,4 @@
 | [2026-10-16-commute-session-scope](api/2026-10-16-commute-session-scope.md) | 제안 | 통근 세션은 시작·이벤트·종료·취소·요약만 하고 남은 시간은 프론트가 계산하며 정차역·경로 좌표는 이번에 뺀다 |
 | [2026-10-16-location-popularity-boost](api/2026-10-16-location-popularity-boost.md) | 제안 | 추천 적합도에 주변 인기곡 가산점(최대 +50%, 차트 범위가 넓을수록 약하게)을 곱하고 분위기 후보 풀 밖의 곡은 넣지 않는다 |
 | [2026-10-17-global-top100-port-from-pr103](api/2026-10-17-global-top100-port-from-pr103.md) | 제안 | 옛 랭킹 구현이 딸려 와 충돌하는 PR #103 을 합치지 않고 전체 Top 100·순위 변동만 develop 의 Top 50 기준에 맞춰 다시 적용했다 |
+| [2026-10-29-campaign-banner-image-s3](api/2026-10-29-campaign-banner-image-s3.md) | 제안 | 캠페인 등록·수정을 multipart(request JSON + image 파일)로 바꾸고 이미지는 S3 에 저장, 운영 권한은 EC2 IAM 역할로 받는다 |

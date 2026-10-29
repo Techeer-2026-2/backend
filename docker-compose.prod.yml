@@ -41,6 +41,10 @@ services:
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY}
       # 브라우저에서 API 를 호출할 프론트 주소(쉼표 구분). EC2 의 ~/backend/.env 에 CORS_ALLOWED_ORIGINS 로 지정한다.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      # 캠페인 배너 이미지 버킷. 권한은 키 대신 EC2 IAM 역할로 받는다(컨테이너라 메타데이터 hop limit 2 필요).
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-ap-northeast-2}
+      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
     expose:
       - "8080"
 

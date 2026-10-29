@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -55,6 +57,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ErrorResponse> handleMissingParameter(MissingServletRequestParameterException e) {
         return invalidInput(e.getParameterName() + ": 필수 값입니다.");
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ErrorResponse> handleMissingPart(MissingServletRequestPartException e) {
+        return invalidInput(e.getRequestPartName() + ": 필수 값입니다.");
+    }
+
+    /**
+     * 업로드 파일이 spring.servlet.multipart 의 크기 제한을 넘으면 컨트롤러에 닿기 전에 이 예외가 난다.
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSize(MaxUploadSizeExceededException e) {
+        return json(ErrorCode.IMAGE_TOO_LARGE.getStatus(), ErrorResponse.of(ErrorCode.IMAGE_TOO_LARGE));
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)

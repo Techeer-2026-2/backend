@@ -11,6 +11,8 @@ import com.techeer.backend.domain.campaign.repository.CampaignRepository;
 import com.techeer.backend.domain.stats.repository.CampaignStatsRepository;
 import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
+import com.techeer.backend.global.storage.ImageStorage;
+import com.techeer.backend.global.storage.ImageType;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -18,6 +20,9 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 캠페인 등록·조회·수정·삭제. 대기/진행중/종료는 저장하지 않고 노출 기간으로 계산한다.
@@ -26,25 +31,30 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class CampaignService {
 
+    private static final String BANNER_DIRECTORY = "campaign-banners";
+
     private final CampaignRepository campaignRepository;
     private final CampaignStatsRepository campaignStatsRepository;
+    private final ImageStorage imageStorage;
     private final Clock clock;
 
     /**
      * 캠페인을 등록한다. 배너 매칭 대상이 되도록 ACTIVE 로 저장하며, 실제 노출은 노출 기간 안에서만 일어난다.
      *
-     * @throws BusinessException 종료 시각이 시작 시각보다 뒤가 아니거나 이미 지난 경우
+     * @throws BusinessException 종료 시각이 시작 시각보다 뒤가 아니거나 이미 지난 경우,
+     *         배너 이미지가 비었거나 허용하지 않는 형식이거나 업로드에 실패한 경우
      */
     @Transactional
-    public CampaignResponse createCampaign(Long userId, CampaignCreateRequest request) {
+    public CampaignResponse createCampaign(Long userId, CampaignCreateRequest request, MultipartFile image) {
         LocalDateTime now = LocalDateTime.now(clock);
         validatePeriod(request.startAt(), request.endAt(), now);
+        String imageUrl = uploadBanner(image);
 
         Campaign campaign = campaignRepository.save(Campaign.builder()
                 .userId(userId)
                 .title(request.title())
                 .body(request.body())
-                .imageUrl(request.imageUrl())
+                .imageUrl(imageUrl)
                 .linkUrl(request.linkUrl())
                 .targetAgeGroup(request.targetAgeGroup())
                 .timeStart(request.startAt())
@@ -80,12 +90,16 @@ public class CampaignService {
 
     /**
      * 요청에 담긴 필드만 수정한다. 대기 상태는 전체, 진행중은 문구와 배너 이미지만 수정할 수 있고 종료 후에는 수정할 수 없다.
+     * 이미지를 바꾸면 수정이 반영된 뒤 이전 이미지를 저장소에서 지운다.
      *
+     * @param image 새 배너 이미지. null 이거나 빈 파일이면 이미지를 바꾸지 않는다
      * @throws BusinessException 캠페인이 없거나 내 캠페인이 아닌 경우, 현재 상태에서 바꿀 수 없는 필드를 보낸 경우,
-     *         수정 결과 종료 시각이 시작 시각보다 뒤가 아니거나 이미 지난 경우
+     *         수정 결과 종료 시각이 시작 시각보다 뒤가 아니거나 이미 지난 경우,
+     *         배너 이미지가 허용하지 않는 형식이거나 업로드에 실패한 경우
      */
     @Transactional
-    public CampaignDetailResponse updateCampaign(Long userId, Long campaignId, CampaignUpdateRequest request) {
+    public CampaignDetailResponse updateCampaign(Long userId, Long campaignId, CampaignUpdateRequest request,
+            MultipartFile image) {
         Campaign campaign = checkOwner(userId,
                 campaignRepository.findWithLockByCampaignIdAndDeletedAtIsNull(campaignId));
         LocalDateTime now = LocalDateTime.now(clock);
@@ -98,7 +112,13 @@ public class CampaignService {
             throw new BusinessException(ErrorCode.CAMPAIGN_FIELD_NOT_EDITABLE);
         }
 
-        campaign.updateContent(request.title(), request.body(), request.imageUrl());
+        String newImageUrl = null;
+        if (image != null && !image.isEmpty()) {
+            newImageUrl = uploadBanner(image);
+            deleteAfterCommit(campaign.getImageUrl());
+        }
+
+        campaign.updateContent(request.title(), request.body(), newImageUrl);
         campaign.updateDelivery(request.linkUrl(), request.targetAgeGroup(), request.startAt(), request.endAt());
         validatePeriod(campaign.getTimeStart(), campaign.getTimeEnd(), now);
 
@@ -118,6 +138,35 @@ public class CampaignService {
         Campaign campaign = checkOwner(userId,
                 campaignRepository.findWithLockByCampaignIdAndDeletedAtIsNull(campaignId));
         campaign.delete(LocalDateTime.now(clock));
+    }
+
+    /**
+     * 배너 이미지를 저장소에 올린다. 이번 트랜잭션이 롤백되면 캠페인에 연결되지 못한 이미지이므로 지운다.
+     */
+    private String uploadBanner(MultipartFile image) {
+        ImageType type = ImageType.of(image);
+        String imageUrl = imageStorage.upload(BANNER_DIRECTORY, image, type);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_ROLLED_BACK) {
+                    imageStorage.deleteIfManaged(imageUrl);
+                }
+            }
+        });
+        return imageUrl;
+    }
+
+    /**
+     * 이번 트랜잭션이 커밋되면 교체 전 이미지를 지운다. 롤백되면 기존 이미지를 계속 쓰므로 지우지 않는다.
+     */
+    private void deleteAfterCommit(String imageUrl) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                imageStorage.deleteIfManaged(imageUrl);
+            }
+        });
     }
 
     private Campaign findMyCampaign(Long userId, Long campaignId) {

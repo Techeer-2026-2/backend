@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 
-@Schema(description = "캠페인 등록 요청")
+@Schema(description = "캠페인 등록 요청. 배너 이미지는 이 JSON 이 아니라 multipart 의 image 파트로 보낸다.")
 public record CampaignCreateRequest(
         @Schema(description = "배너 제목", example = "OOO 컴백 D-3")
         @NotBlank
@@ -15,10 +15,6 @@ public record CampaignCreateRequest(
         @Schema(description = "배너 본문", example = "10월 10일 오후 6시 신곡 공개")
         @NotBlank
         String body,
-        @Schema(description = "배너 이미지 URL", example = "https://example.com/banner.png")
-        @NotBlank
-        @Size(max = 512)
-        String imageUrl,
         @Schema(description = "클릭 시 이동할 URL. 비우면 배너 탭 자체를 클릭으로 집계한다.",
                 example = "https://example.com/comeback")
         @Size(max = 512)

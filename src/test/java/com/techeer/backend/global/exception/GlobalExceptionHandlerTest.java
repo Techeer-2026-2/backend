@@ -2,6 +2,7 @@ package com.techeer.backend.global.exception;
 
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -17,7 +18,10 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 예외 → 에러 JSON 변환 테스트. 스프링 컨텍스트·DB 없이 도는 빠른 테스트.
@@ -54,12 +58,40 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.message").value(startsWith("name:")));
     }
 
+    @Test
+    @DisplayName("업로드 크기 제한을 넘으면 413 과 IMAGE_TOO_LARGE 를 돌려준다")
+    void maxUploadSizeIsConverted() throws Exception {
+        mockMvc.perform(get("/fake/too-large"))
+                .andExpect(status().isPayloadTooLarge())
+                .andExpect(jsonPath("$.code").value("IMAGE_TOO_LARGE"));
+    }
+
+    @Test
+    @DisplayName("multipart 필수 파트가 빠지면 400 과 '파트명: 필수 값입니다.' 를 돌려준다")
+    void missingPartIsConverted() throws Exception {
+        mockMvc.perform(multipart("/fake/part"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"))
+                .andExpect(jsonPath("$.message").value("image: 필수 값입니다."));
+    }
+
     @RestController
     static class FakeController {
 
         @GetMapping("/fake/business")
         String business() {
             throw new BusinessException(ErrorCode.TARGET_USER_NOT_FOUND);
+        }
+
+        @GetMapping("/fake/too-large")
+        String tooLarge() {
+            // 실제로는 서블릿이 multipart 를 읽을 때 던진다. MockMvc 는 크기 제한을 적용하지 않아 직접 던진다.
+            throw new MaxUploadSizeExceededException(5 * 1024 * 1024);
+        }
+
+        @PostMapping("/fake/part")
+        String part(@RequestPart("image") MultipartFile image) {
+            return image.getName();
         }
 
         @PostMapping("/fake/validate")

@@ -20,16 +20,18 @@ import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -41,18 +43,27 @@ public class CampaignController {
 
     @Operation(
             summary = "캠페인 등록",
-            description = "컴백 광고 배너 캠페인을 등록한다. linkUrl 을 비우면 배너 탭 자체를 클릭으로 집계한다.",
+            description = "컴백 광고 배너 캠페인을 등록한다. multipart/form-data 로 request(캠페인 정보 JSON)와 "
+                    + "image(배너 이미지 파일: png, jpg, webp, 최대 5MB)를 함께 보낸다. "
+                    + "linkUrl 을 비우면 배너 탭 자체를 클릭으로 집계한다.",
             security = @SecurityRequirement(name = SwaggerConfig.BEARER_AUTH))
     @ApiResponse(responseCode = "201", description = "등록됨")
     @ApiResponse(responseCode = "401", description = "토큰이 없거나(AUTH_REQUIRED) 올바르지 않음(INVALID_TOKEN)",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(responseCode = "400", description = "요청 값 오류 또는 노출 기간 오류",
+    @ApiResponse(responseCode = "400",
+            description = "요청 값 오류, 노출 기간 오류, 빈 이미지(IMAGE_EMPTY) 또는 허용하지 않는 형식(IMAGE_UNSUPPORTED_TYPE)",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @PostMapping("/campaigns")
+    @ApiResponse(responseCode = "413", description = "이미지가 5MB 를 넘음(IMAGE_TOO_LARGE)",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "502", description = "이미지 저장소 업로드 실패(IMAGE_UPLOAD_FAILED)",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @PostMapping(value = "/campaigns", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<CampaignResponse> createCampaign(
             @AdvertiserId Long advertiserId,
-            @Valid @RequestBody CampaignCreateRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(campaignService.createCampaign(advertiserId, request));
+            @Valid @RequestPart("request") CampaignCreateRequest request,
+            @RequestPart("image") MultipartFile image) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(campaignService.createCampaign(advertiserId, request, image));
     }
 
     @Operation(
@@ -92,13 +103,19 @@ public class CampaignController {
 
     @Operation(
             summary = "캠페인 수정",
-            description = "바꿀 필드만 보낸다. 대기 상태는 전체 필드를, 진행중은 title/body/imageUrl 만 수정할 수 있다. "
-                    + "종료된 캠페인은 수정할 수 없다.",
+            description = "multipart/form-data 로 바꿀 것만 보낸다. request(바꿀 필드만 담은 JSON)와 "
+                    + "image(새 배너 이미지 파일)는 둘 다 선택이다. 대기 상태는 전체 필드를, 진행중은 title/body 와 이미지만 "
+                    + "수정할 수 있다. 종료된 캠페인은 수정할 수 없다.",
             security = @SecurityRequirement(name = SwaggerConfig.BEARER_AUTH))
     @ApiResponse(responseCode = "200", description = "수정된 캠페인")
     @ApiResponse(responseCode = "401", description = "토큰이 없거나(AUTH_REQUIRED) 올바르지 않음(INVALID_TOKEN)",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(responseCode = "400", description = "요청 값 오류 또는 노출 기간 오류",
+    @ApiResponse(responseCode = "400",
+            description = "요청 값 오류, 노출 기간 오류 또는 허용하지 않는 이미지 형식(IMAGE_UNSUPPORTED_TYPE)",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "413", description = "이미지가 5MB 를 넘음(IMAGE_TOO_LARGE)",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "502", description = "이미지 저장소 업로드 실패(IMAGE_UPLOAD_FAILED)",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "403", description = "내 캠페인이 아님",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -106,12 +123,14 @@ public class CampaignController {
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "409", description = "현재 상태에서 수정할 수 없는 필드 또는 종료된 캠페인",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @PatchMapping("/campaigns/{campaignId}")
+    @PatchMapping(value = "/campaigns/{campaignId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<CampaignDetailResponse> updateCampaign(
             @PathVariable Long campaignId,
             @AdvertiserId Long advertiserId,
-            @Valid @RequestBody CampaignUpdateRequest request) {
-        return ResponseEntity.ok(campaignService.updateCampaign(advertiserId, campaignId, request));
+            @Valid @RequestPart(value = "request", required = false) CampaignUpdateRequest request,
+            @RequestPart(value = "image", required = false) MultipartFile image) {
+        CampaignUpdateRequest changes = request != null ? request : CampaignUpdateRequest.EMPTY;
+        return ResponseEntity.ok(campaignService.updateCampaign(advertiserId, campaignId, changes, image));
     }
 
     @Operation(

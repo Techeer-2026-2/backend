@@ -31,6 +31,12 @@ spring:
     default-property-inclusion: non_null
     time-zone: Asia/Seoul
 
+  servlet:
+    multipart:
+      # 캠페인 배너 이미지 업로드 제한. 이미지 5MB + JSON 파트 여유분
+      max-file-size: 5MB
+      max-request-size: 6MB
+
 server:
   port: 8080
   shutdown: graceful
@@ -90,6 +96,15 @@ external:
   tmap:
     base-url: https://apis.openapi.sk.com
     app-key: ${TMAP_APP_KEY:}
+
+# ---------- 이미지 저장소(S3) ----------
+storage:
+  s3:
+    # 비어 있으면 서버는 뜨지만 이미지 업로드는 IMAGE_UPLOAD_FAILED 로 실패한다.
+    bucket: ${S3_BUCKET:}
+    region: ${S3_REGION:ap-northeast-2}
+    # 응답에 담을 이미지 주소의 앞부분. CloudFront 를 붙이면 그 주소로 바꾼다.
+    public-base-url: ${S3_PUBLIC_BASE_URL:https://${storage.s3.bucket}.s3.${storage.s3.region}.amazonaws.com}
 
 logging:
   level:

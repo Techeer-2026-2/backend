@@ -5,8 +5,8 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 
-@Schema(description = "캠페인 수정 요청. 바꿀 필드만 보낸다. "
-        + "진행중인 캠페인은 title, body, imageUrl 만 보낼 수 있다.")
+@Schema(description = "캠페인 수정 요청. 바꿀 필드만 보낸다. 배너 이미지는 multipart 의 image 파트로 보낸다. "
+        + "진행중인 캠페인은 title, body 와 이미지만 바꿀 수 있다.")
 public record CampaignUpdateRequest(
         @Schema(description = "배너 제목", example = "OOO 컴백 D-1")
         @Size(min = 1, max = 128)
@@ -16,10 +16,6 @@ public record CampaignUpdateRequest(
         @Size(min = 1)
         @Pattern(regexp = NOT_BLANK, message = BLANK_MESSAGE)
         String body,
-        @Schema(description = "배너 이미지 URL", example = "https://example.com/banner-v2.png")
-        @Size(min = 1, max = 512)
-        @Pattern(regexp = NOT_BLANK, message = BLANK_MESSAGE)
-        String imageUrl,
         @Schema(description = "클릭 시 이동할 URL. 빈 문자열을 보내면 링크를 지운다.",
                 example = "https://example.com/comeback")
         @Size(max = 512)
@@ -37,6 +33,10 @@ public record CampaignUpdateRequest(
     // U 플래그: 전각 공백(U+3000) 등 유니코드 공백도 \S 가 아닌 공백으로 본다.
     private static final String NOT_BLANK = "(?sU).*\\S.*";
     private static final String BLANK_MESSAGE = "공백일 수 없습니다";
+
+    /** 이미지만 바꿀 때처럼 request 파트 없이 온 요청. 아무 필드도 바꾸지 않는다. */
+    public static final CampaignUpdateRequest EMPTY =
+            new CampaignUpdateRequest(null, null, null, null, null, null);
 
     /**
      * 진행중에는 바꿀 수 없는 필드(링크·타겟 연령대·노출 기간)를 담고 있는지.
