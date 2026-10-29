@@ -11,7 +11,7 @@
 | 저장소 | 추가 | 수정 | 유지 | 만들지 않음 |
 |---|---|---|---|---|
 | PostgreSQL | 6개 (`campaign_minute_stats`, `campaign_budget`, `campaign_slot_budget`, `refund_ledger`, `outbox_events`, `recompute_log`[확정]) | 3개 (`ad_impressions`, `click_events`, `campaigns`) | 광고 기존 표 전부 (`campaign_stats` 포함) | `top_ads_snapshot` [확인 필요], `impression_facts` (ClickHouse 노출 표) |
-| ClickHouse | 6개 표 + 구체화 뷰 4개 (롤업 포함) | — | — | 노출용 표 |
+| ClickHouse | 5개 표 + 구체화 뷰 3개 (롤업 포함, 【정정: click_raw 제외】) | — | — | 노출용 표 |
 | S3 | 파일 경로 규칙 1개 (`raw-clicks/`) | — | — | — |
 | Redis | 키 3종 (DB 아님, 캐시) | — | — | — |
 
@@ -28,7 +28,7 @@
 | `campaign_stats` | 캠페인 누적 노출·클릭 (1행) | `campaign_id`(PK), `sent_count`, `click_count` | 대시보드 누적 숫자가 읽음 |
 | `target_users` | 배너를 볼 가상 유저 | `target_user_id`(PK), `age_group`, `gender`(`M`/`F` 또는 `male`/`female`) | |
 | `ad_impressions` | 노출 1건 | `notification_id`(PK, 36자), `campaign_id`, `target_user_id`, `shown_at` | |
-| `click_events` | 클릭 1건 | `click_id`(PK), `notification_id`(UNIQUE), `campaign_id`, `target_user_id`, `clicked_at` | 중복 클릭은 `ON CONFLICT DO NOTHING` |
+| `click_events` 【정정 2026-10-29: 신규 쓰기 중단, 기존 데이터만 보관】 | 클릭 1건 | `click_id`(PK), `notification_id`(UNIQUE), `campaign_id`, `target_user_id`, `clicked_at` | 중복 클릭은 `ON CONFLICT DO NOTHING` |
 
 > 음악·랭킹·통근 관련 표(`users`, `playlists`, `tracks`, `ranking_*`, `commute_*` 등)는 이 명세 범위 밖이다. 같은 DB에 있어도 이번 고도화에서 건드리지 않는다.
 
@@ -179,9 +179,9 @@ CREATE TABLE recompute_log (
     files_read       INT,                          -- S3 에서 읽은 파일 수
     unique_clicks    BIGINT,                       -- notification_id 기준 고유 클릭 수 (S3)
     replaced_total   BIGINT,                       -- 교체 후 click_facts 합계
-    pg_click_count   BIGINT,                       -- 조정: PostgreSQL click_events 행 수 (같은 날짜)
+    outbox_count    BIGINT,                       -- 조정: outbox_events 행 수 (같은 날짜, 【정정 2026-10-29】)
     s3_unique_count  BIGINT,                       -- 조정: S3 고유 notification_id 수
-    ch_raw_count     BIGINT,                       -- 조정: ClickHouse click_raw 행 수
+    ch_daily_count  BIGINT,                       -- 조정: ClickHouse click_facts 일별 합계 (【정정 2026-10-29】)
     reconcile_ok     BOOLEAN,                      -- 세 값이 모두 같은지 (허용 오차 0)
     error_message    TEXT,
     UNIQUE (target_date, started_at)
@@ -248,20 +248,7 @@ SETTINGS kafka_broker_list = 'kafka:9092',
          kafka_format = 'JSONEachRow',
          kafka_num_consumers = 3;
 
--- 원본 (중복 제거). 같은 notification_id 는 한 줄로 합쳐짐
-CREATE TABLE click_raw (
-    notification_id String,
-    campaign_id     Int64,
-    age_group       LowCardinality(String),
-    gender          LowCardinality(String),
-    clicked_at      DateTime,
-    ingested_at     DateTime DEFAULT now()   -- ClickHouse 가 받은 시각 (지연 측정용)
-) ENGINE = ReplacingMergeTree
-ORDER BY notification_id;
-
-CREATE MATERIALIZED VIEW click_raw_mv TO click_raw AS
-SELECT notification_id, campaign_id, age_group, gender, clicked_at
-FROM click_events_kafka;
+-- 【정정 2026-10-29】 click_raw 와 click_raw_mv 는 만들지 않는다. 중복은 outbox 와 재계산에서 처리한다.
 
 -- 대시보드가 읽는 집계 (분·연령대·성별 합계)
 CREATE TABLE click_facts (
@@ -283,9 +270,9 @@ FROM click_events_kafka
 GROUP BY campaign_id, minute, age_group, gender;
 ```
 
-- **구체화 뷰는 2개** (`click_raw_mv`, `click_facts_mv`). 재계산은 뷰가 아니라 표 교체로 처리한다.
+- **구체화 뷰** (`click_facts_mv`, 롤업용 2개). 【정정 2026-10-29: `click_raw_mv` 는 없음】 재계산은 뷰가 아니라 표 교체로 처리한다.
 - `click_facts_mv` 는 Kafka 메시지가 두 번 오면 두 번 더한다 → **실시간 값은 잠정**. 확정은 재계산이 한다.
-- `click_raw` 의 `ReplacingMergeTree` 는 **병합 때** 중복을 없앤다. 병합 전에는 같은 줄이 남아 있을 수 있다. 그래서 재계산은 `GROUP BY notification_id` 로 직접 중복을 없앤다. **[확인 필요]** 조정 쿼리에서 `click_raw` 를 셀 때 `FINAL` 을 붙일지 결정한다.
+【정정 2026-10-29: click_raw 가 없으므로 이 문장은 무효】 - `click_raw` 의 `ReplacingMergeTree` 는 **병합 때** 중복을 없앤다. 병합 전에는 같은 줄이 남아 있을 수 있다. 그래서 재계산은 `GROUP BY notification_id` 로 직접 중복을 없앤다. **[확인 필요]** 조정 쿼리에서 `click_raw` 를 셀 때 `FINAL` 을 붙일지 결정한다.
 - **재계산 SQL** (3-8, 파티션 교체):
   ```sql
   INSERT INTO click_facts_stage
@@ -482,7 +469,7 @@ s3://<버킷>/raw-clicks/{yyyy}/{MM}/{dd}/{HH}/{배치ID}.json
 
 **PostgreSQL**
 - [ ] [지금] `ad_impressions` 열 추가 (2-1)
-- [ ] [지금] `click_events` 열 추가 (2-1)
+- [ ] [지금] `click_events` 열 추가 (2-1) 【정정: 신규 쓰기 중단】
 - [ ] [지금] `campaigns.bid_price` 추가 (2-2)
 - [ ] [지금] `campaign_minute_stats` + `idx_cms_minute` (2-3)
 - [ ] [지금] `campaign_budget`, `campaign_slot_budget`, `refund_ledger` (2-6)
@@ -494,7 +481,7 @@ s3://<버킷>/raw-clicks/{yyyy}/{MM}/{dd}/{HH}/{배치ID}.json
 - [x] [제외] `top_ads_snapshot` (확정: 만들지 않음, 2-9)
 
 **ClickHouse** (4주차)
-- [ ] `click_events_kafka`, `click_raw`, `click_facts`, `click_facts_stage`, 구체화 뷰 2개 (5절)
+- [ ] `click_events_kafka`, `click_facts`, `click_facts_stage`, 구체화 뷰 3개 (5절, click_raw 제외)
 - [ ] [4주차, 계획 포함] `click_facts_hour`, `click_facts_day` (및 구체화 뷰 2개, 5절)
 - [ ] [제외] 노출용 표
 
