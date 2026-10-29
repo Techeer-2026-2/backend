@@ -11,7 +11,7 @@
 | 저장소 | 추가 | 수정 | 유지 | 만들지 않음 |
 |---|---|---|---|---|
 | PostgreSQL | 6개 (`campaign_minute_stats`, `campaign_budget`, `campaign_slot_budget`, `refund_ledger`, `outbox_events`, `recompute_log`[확정]) | 3개 (`ad_impressions`, `click_events`, `campaigns`) | 광고 기존 표 전부 (`campaign_stats` 포함) | `top_ads_snapshot` [확인 필요], `impression_facts` (ClickHouse 노출 표) |
-| ClickHouse | 4개 표 + 구체화 뷰 2개 | — | — | 노출용 표 |
+| ClickHouse | 6개 표 + 구체화 뷰 4개 (롤업 포함) | — | — | 노출용 표 |
 | S3 | 파일 경로 규칙 1개 (`raw-clicks/`) | — | — | — |
 | Redis | 키 3종 (DB 아님, 캐시) | — | — | — |
 
@@ -198,7 +198,7 @@ CREATE TABLE recompute_log (
   - `고도화_계획.md` 6-1 ⑧ 과 11-2: **만들지 않음** (메모리 상태가 없어서 스냅숏 불필요).
   - `고도화_계획.md` 3-3 ("책의 스냅숏 개념 적용") 과 3-6 ("Redis 상위 N 키는 분마다 결과를 `top_ads_snapshot` 에 남긴다"): **만든다**.
   - 결정: **만들지 않는다.** 원문 3-3, 3-6 의 해당 문장은 이 결정에 맞춰 고친다 (계획 문서에 반영함). 나중에 Redis 복구 문제가 실제로 생기면 그때 추가한다.
-- **`click_facts_hour`, `click_facts_day`** (롤업): **[보류].** 통계 API 가 24시간 이내만 허용하므로 지금은 만들지 않는다. 만든다면 ClickHouse 구체화 뷰로 만들고 재계산 때 같이 교체한다 (3-11 원문 참고).
+- **`click_facts_hour`, `click_facts_day`** (롤업): **[계획 포함, 4주차 — 2026-10-29 정정].** 통계 API 는 지금 24시간만 허용하지만, 기간을 늘릴 때 바로 쓰도록 미리 계획에 넣었다. 만들 때 ClickHouse 구체화 뷰로 만들고 재계산 때 같이 교체한다 (3-11 원문 참고).
 
 ---
 
@@ -305,7 +305,44 @@ GROUP BY campaign_id, minute, age_group, gender;
 
   ALTER TABLE click_facts REPLACE PARTITION 20261101 FROM click_facts_stage;
   ```
-- 롤업 표(`click_facts_hour`, `click_facts_day`)는 **보류** (2-9).
+- 롤업 표(`click_facts_hour`, `click_facts_day`)는 **계획에 포함 (4주차, 2026-10-29 정정)**. 기간 제한(24시간)을 늘리면 바로 쓴다. 만들 때 재계산 교체 대상에 함께 넣는다.
+
+```sql
+-- 시간 표 (분 표를 시간 단위로 합침, 날짜 단위로 파티션)
+CREATE TABLE click_facts_hour (
+    campaign_id  Int64,
+    hour         DateTime,
+    age_group    LowCardinality(String),
+    gender       LowCardinality(String),
+    click_count  UInt64
+) ENGINE = SummingMergeTree
+PARTITION BY toYYYYMMDD(hour)
+ORDER BY (campaign_id, hour, age_group, gender);
+
+CREATE MATERIALIZED VIEW click_facts_hour_mv TO click_facts_hour AS
+SELECT campaign_id, toStartOfHour(minute) AS hour, age_group, gender, sum(click_count) AS click_count
+FROM click_facts
+GROUP BY campaign_id, hour, age_group, gender;
+
+-- 일 표 (날짜 단위, 파티션도 하루 단위로 맞춰서 날짜별 교체가 가능하게 함)
+CREATE TABLE click_facts_day (
+    campaign_id  Int64,
+    day          Date,
+    age_group    LowCardinality(String),
+    gender       LowCardinality(String),
+    click_count  UInt64
+) ENGINE = SummingMergeTree
+PARTITION BY toYYYYMMDD(day)
+ORDER BY (campaign_id, day, age_group, gender);
+
+CREATE MATERIALIZED VIEW click_facts_day_mv TO click_facts_day AS
+SELECT campaign_id, toDate(minute) AS day, age_group, gender, sum(click_count) AS click_count
+FROM click_facts
+GROUP BY campaign_id, day, age_group, gender;
+```
+
+- 주의: `REPLACE PARTITION` 은 MV 를 다시 실행하지 않는다. 그래서 재계산 때 `click_facts` 뿐 아니라 같은 날짜의 `click_facts_hour`, `click_facts_day` 도 **같이 교체**해야 한다 (계획 3-11).
+
 
 ---
 
@@ -458,7 +495,7 @@ s3://<버킷>/raw-clicks/{yyyy}/{MM}/{dd}/{HH}/{배치ID}.json
 
 **ClickHouse** (4주차)
 - [ ] `click_events_kafka`, `click_raw`, `click_facts`, `click_facts_stage`, 구체화 뷰 2개 (5절)
-- [ ] [보류] `click_facts_hour`, `click_facts_day`
+- [ ] [4주차, 계획 포함] `click_facts_hour`, `click_facts_day` (및 구체화 뷰 2개, 5절)
 - [ ] [제외] 노출용 표
 
 **S3**
