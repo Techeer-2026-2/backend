@@ -1,5 +1,6 @@
 package com.techeer.backend.domain.stats;
 
+import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.techeer.backend.TestcontainersConfiguration;
@@ -13,6 +14,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+
 import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
@@ -66,7 +68,7 @@ class CampaignStatsStreamTimeoutIntegrationTest {
     @DisplayName("timeout 이 지나면 연결이 끝나고 구독이 정리되며, 다시 연결하면 현재 값을 바로 받는다")
     void closesOnTimeoutAndReconnectWorks() throws Exception {
         long campaignId = campaignRepository.save(Campaign.builder()
-                .userId(1L).title("제목").targetAgeGroup("20s").status(CampaignStatus.ACTIVE).build()).getCampaignId();
+                .userId(1L).title("제목").ageGroups(Set.of("20s")).genders(Set.of("all")).status(CampaignStatus.ACTIVE).build()).getCampaignId();
         awaitActive(0);
 
         int dataEvents = 0;

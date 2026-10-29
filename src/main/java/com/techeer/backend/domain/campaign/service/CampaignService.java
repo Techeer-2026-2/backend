@@ -15,8 +15,10 @@ import com.techeer.backend.global.storage.ImageStorage;
 import com.techeer.backend.global.storage.ImageType;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +50,7 @@ public class CampaignService {
     public CampaignResponse createCampaign(Long userId, CampaignCreateRequest request, MultipartFile image) {
         LocalDateTime now = LocalDateTime.now(clock);
         validatePeriod(request.startAt(), request.endAt(), now);
+        CampaignTargetRules.validate(request.targetAgeGroups(), request.targetGenders());
         String imageUrl = uploadBanner(image);
 
         Campaign campaign = campaignRepository.save(Campaign.builder()
@@ -56,7 +59,8 @@ public class CampaignService {
                 .body(request.body())
                 .imageUrl(imageUrl)
                 .linkUrl(request.linkUrl())
-                .targetAgeGroup(request.targetAgeGroup())
+                .ageGroups(new HashSet<>(request.targetAgeGroups()))
+                .genders(new HashSet<>(request.targetGenders()))
                 .timeStart(request.startAt())
                 .timeEnd(request.endAt())
                 .status(CampaignStatus.ACTIVE)
@@ -112,6 +116,13 @@ public class CampaignService {
             throw new BusinessException(ErrorCode.CAMPAIGN_FIELD_NOT_EDITABLE);
         }
 
+        if (request.targetAgeGroups() != null) {
+            CampaignTargetRules.validateAgeGroups(request.targetAgeGroups());
+        }
+        if (request.targetGenders() != null) {
+            CampaignTargetRules.validateGenders(request.targetGenders());
+        }
+
         String newImageUrl = null;
         if (image != null && !image.isEmpty()) {
             newImageUrl = uploadBanner(image);
@@ -119,7 +130,8 @@ public class CampaignService {
         }
 
         campaign.updateContent(request.title(), request.body(), newImageUrl);
-        campaign.updateDelivery(request.linkUrl(), request.targetAgeGroup(), request.startAt(), request.endAt());
+        campaign.updateDelivery(request.linkUrl(), toSet(request.targetAgeGroups()), toSet(request.targetGenders()),
+                request.startAt(), request.endAt());
         validatePeriod(campaign.getTimeStart(), campaign.getTimeEnd(), now);
 
         // 응답의 updatedAt 에 이번 수정 시각이 담기도록 바로 반영한다.
@@ -167,6 +179,10 @@ public class CampaignService {
                 imageStorage.deleteIfManaged(imageUrl);
             }
         });
+    }
+
+    private static Set<String> toSet(List<String> values) {
+        return values == null ? null : new HashSet<>(values);
     }
 
     private Campaign findMyCampaign(Long userId, Long campaignId) {

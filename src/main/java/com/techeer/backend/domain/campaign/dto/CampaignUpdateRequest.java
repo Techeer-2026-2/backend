@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Schema(description = "캠페인 수정 요청. 바꿀 필드만 보낸다. 배너 이미지는 multipart 의 image 파트로 보낸다. "
         + "진행중인 캠페인은 title, body 와 이미지만 바꿀 수 있다.")
@@ -20,10 +21,12 @@ public record CampaignUpdateRequest(
                 example = "https://example.com/comeback")
         @Size(max = 512)
         String linkUrl,
-        @Schema(description = "배너를 노출할 타겟 연령대", example = "20s")
-        @Size(min = 1, max = 16)
-        @Pattern(regexp = NOT_BLANK, message = BLANK_MESSAGE)
-        String targetAgeGroup,
+        @Schema(description = "노출할 타겟 연령대 목록. 보내면 목록 전체를 바꾼다. 값: 10s ~ 50s",
+                example = "[\"20s\", \"30s\"]")
+        List<String> targetAgeGroups,
+        @Schema(description = "노출할 타겟 성별 목록. 보내면 목록 전체를 바꾼다. 값: male, female, all",
+                example = "[\"all\"]")
+        List<String> targetGenders,
         @Schema(description = "노출 시작 시각", example = "2026-10-07T00:00:00")
         LocalDateTime startAt,
         @Schema(description = "노출 종료 시각. 시작 시각보다 뒤여야 한다.", example = "2026-10-10T18:00:00")
@@ -36,12 +39,13 @@ public record CampaignUpdateRequest(
 
     /** 이미지만 바꿀 때처럼 request 파트 없이 온 요청. 아무 필드도 바꾸지 않는다. */
     public static final CampaignUpdateRequest EMPTY =
-            new CampaignUpdateRequest(null, null, null, null, null, null);
+            new CampaignUpdateRequest(null, null, null, null, null, null, null);
 
     /**
-     * 진행중에는 바꿀 수 없는 필드(링크·타겟 연령대·노출 기간)를 담고 있는지.
+     * 진행중에는 바꿀 수 없는 필드(링크·타겟 조건·노출 기간)를 담고 있는지.
      */
     public boolean changesDelivery() {
-        return linkUrl != null || targetAgeGroup != null || startAt != null || endAt != null;
+        return linkUrl != null || targetAgeGroups != null || targetGenders != null
+                || startAt != null || endAt != null;
     }
 }

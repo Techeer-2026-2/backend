@@ -40,8 +40,24 @@ public class BannerService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.TARGET_USER_NOT_FOUND));
 
         LocalDateTime now = LocalDateTime.now(clock);
-        return campaignRepository.findRandomActiveByAgeGroup(targetUser.getAgeGroup(), now)
+        return campaignRepository.findRandomActiveForTarget(targetUser.getAgeGroup(), toGenderCode(targetUser.getGender()), now)
                 .map(campaign -> recordImpression(campaign, targetUser, now));
+    }
+
+    /**
+     * 유저에 저장된 성별 값을 캠페인 성별 코드(male, female)로 맞춘다. 알 수 없는 값이면 빈 문자열.
+     *
+     * <p>기존 데이터는 F/M 으로 저장돼 있을 수 있어서 둘 다 받는다.
+     */
+    static String toGenderCode(String gender) {
+        if (gender == null) {
+            return "";
+        }
+        return switch (gender.trim().toLowerCase()) {
+            case "m", "male" -> "male";
+            case "f", "female" -> "female";
+            default -> "";
+        };
     }
 
     private BannerResponse recordImpression(Campaign campaign, TargetUser targetUser, LocalDateTime now) {

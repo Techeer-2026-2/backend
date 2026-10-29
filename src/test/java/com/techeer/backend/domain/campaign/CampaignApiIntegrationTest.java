@@ -1,5 +1,6 @@
 package com.techeer.backend.domain.campaign;
 
+import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -101,7 +102,7 @@ class CampaignApiIntegrationTest {
         Campaign saved = campaignRepository.findAll().get(0);
         assertThat(saved.getUserId()).isEqualTo(USER_ID);
         assertThat(saved.getImageUrl()).isEqualTo(UPLOADED_URL);
-        assertThat(saved.getTargetAgeGroup()).isEqualTo("20s");
+        assertThat(saved.getAgeGroups()).containsExactly("20s");
         assertThat(saved.getTimeStart()).isEqualTo(startAt);
         assertThat(saved.getTimeEnd()).isEqualTo(endAt);
         assertThat(saved.getStatus()).isEqualTo(CampaignStatus.ACTIVE);
@@ -213,6 +214,21 @@ class CampaignApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("타겟 목록에 null 이나 허용되지 않은 값이 있으면 400 을 돌려준다")
+    void rejectsInvalidTargetValues() throws Exception {
+        String base = campaignJson(daysFromNow(1), daysFromNow(3), "null");
+        String nullAge = base.replace("\"targetAgeGroups\": [\"20s\"]", "\"targetAgeGroups\": [null]");
+        String badGender = base.replace("\"targetGenders\": [\"all\"]", "\"targetGenders\": [\"other\"]");
+
+        mockMvc.perform(createRequest(USER_ID, nullAge))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+        mockMvc.perform(createRequest(USER_ID, badGender))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
     @DisplayName("필수 값이 빠지면 400 을 돌려준다")
     void rejectsMissingRequiredFields() throws Exception {
         mockMvc.perform(createRequest(USER_ID, "{\"title\": \"OOO 컴백 D-3\"}"))
@@ -310,7 +326,7 @@ class CampaignApiIntegrationTest {
                 .title(title)
                 .body("10월 10일 오후 6시 신곡 공개")
                 .imageUrl("https://example.com/banner.png")
-                .targetAgeGroup("20s")
+                .ageGroups(Set.of("20s")).genders(Set.of("all"))
                 .timeStart(timeStart)
                 .timeEnd(timeEnd)
                 .status(CampaignStatus.ACTIVE)
@@ -329,7 +345,7 @@ class CampaignApiIntegrationTest {
                   "title": "OOO 컴백 D-3",
                   "body": "10월 10일 오후 6시 신곡 공개",
                   "linkUrl": %s,
-                  "targetAgeGroup": "20s",
+                  "targetAgeGroups": ["20s"], "targetGenders": ["all"],
                   "startAt": "%s",
                   "endAt": "%s"
                 }

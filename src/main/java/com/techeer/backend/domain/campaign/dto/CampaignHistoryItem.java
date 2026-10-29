@@ -3,13 +3,16 @@ package com.techeer.backend.domain.campaign.dto;
 import com.techeer.backend.domain.campaign.entity.Campaign;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Set;
 
 @Schema(description = "지난 캠페인 한 건과 결과 요약")
 public record CampaignHistoryItem(
         @Schema(description = "캠페인 ID", example = "10") Long campaignId,
         @Schema(description = "광고 제목", example = "출근길 커피 1+1") String title,
         @Schema(description = "배너 이미지 주소") String imageUrl,
-        @Schema(description = "타겟 연령대", example = "20s") String targetAgeGroup,
+        @Schema(description = "타겟 연령대 목록", example = "[\"20s\"]") List<String> targetAgeGroups,
+        @Schema(description = "타겟 성별 목록", example = "[\"all\"]") List<String> targetGenders,
         @Schema(description = "노출 시작 시각") LocalDateTime startAt,
         @Schema(description = "노출 종료 시각. 종료 시각 없이 ENDED 로 끝난 캠페인은 null") LocalDateTime endAt,
         @Schema(description = "노출 수", example = "120") long sentCount,
@@ -27,11 +30,16 @@ public record CampaignHistoryItem(
                 campaign.getCampaignId(),
                 campaign.getTitle(),
                 campaign.getImageUrl(),
-                campaign.getTargetAgeGroup(),
+                sorted(campaign.getAgeGroups()),
+                sorted(campaign.getGenders()),
                 campaign.getTimeStart(),
                 campaign.getTimeEnd(),
                 sentCount,
                 clickCount,
                 clickRate);
+    }
+
+    private static List<String> sorted(Set<String> values) {
+        return values.stream().sorted().toList();
     }
 }

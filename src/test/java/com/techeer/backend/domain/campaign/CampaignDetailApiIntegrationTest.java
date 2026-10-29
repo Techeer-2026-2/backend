@@ -1,5 +1,6 @@
 package com.techeer.backend.domain.campaign;
 
+import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -22,6 +23,7 @@ import com.techeer.backend.global.storage.ImageStorage;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -182,7 +184,7 @@ class CampaignDetailApiIntegrationTest {
                           "title": "바뀐 제목",
                           "body": "바뀐 본문",
                           "linkUrl": "https://example.com/new",
-                          "targetAgeGroup": "30s",
+                          "targetAgeGroups": ["30s"], "targetGenders": ["all"],
                           "startAt": "%s",
                           "endAt": "%s"
                         }
@@ -190,7 +192,7 @@ class CampaignDetailApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("바뀐 제목"))
                 .andExpect(jsonPath("$.imageUrl").value(NEW_IMAGE_URL))
-                .andExpect(jsonPath("$.targetAgeGroup").value("30s"))
+                .andExpect(jsonPath("$.targetAgeGroups[0]").value("30s"))
                 .andExpect(jsonPath("$.status").value("PENDING"));
 
         Campaign updated = reload(campaign);
@@ -198,7 +200,7 @@ class CampaignDetailApiIntegrationTest {
         assertThat(updated.getBody()).isEqualTo("바뀐 본문");
         assertThat(updated.getImageUrl()).isEqualTo(NEW_IMAGE_URL);
         assertThat(updated.getLinkUrl()).isEqualTo("https://example.com/new");
-        assertThat(updated.getTargetAgeGroup()).isEqualTo("30s");
+        assertThat(updated.getAgeGroups()).containsExactly("30s");
         assertThat(updated.getTimeStart()).isEqualTo(startAt);
         assertThat(updated.getTimeEnd()).isEqualTo(endAt);
     }
@@ -288,7 +290,7 @@ class CampaignDetailApiIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CAMPAIGN_FIELD_NOT_EDITABLE"));
 
-        mockMvc.perform(patchRequest(campaign, USER_ID, "{\"targetAgeGroup\": \"30s\"}"))
+        mockMvc.perform(patchRequest(campaign, USER_ID, "{\"targetAgeGroups\": [\"30s\"]}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CAMPAIGN_FIELD_NOT_EDITABLE"));
 
@@ -296,7 +298,7 @@ class CampaignDetailApiIntegrationTest {
         assertThat(updated.getTitle()).isEqualTo("바뀐 제목");
         assertThat(updated.getBody()).isEqualTo("바뀐 본문");
         assertThat(updated.getImageUrl()).isEqualTo(NEW_IMAGE_URL);
-        assertThat(updated.getTargetAgeGroup()).isEqualTo(campaign.getTargetAgeGroup());
+        assertThat(updated.getAgeGroups()).isEqualTo(campaign.getAgeGroups());
         assertThat(updated.getTimeEnd()).isEqualTo(campaign.getTimeEnd());
     }
 
@@ -326,14 +328,14 @@ class CampaignDetailApiIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
 
-        for (String field : List.of("title", "body", "targetAgeGroup")) {
+        for (String field : List.of("title", "body")) {
             mockMvc.perform(patchRequest(campaign, USER_ID, "{\"" + field + "\": \"   \"}"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
         }
 
         // 전각 공백(U+3000)만 담긴 값도 공백으로 본다.
-        for (String field : List.of("title", "body", "targetAgeGroup")) {
+        for (String field : List.of("title", "body")) {
             mockMvc.perform(patchRequest(campaign, USER_ID, "{\"" + field + "\": \"　\"}"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
@@ -430,7 +432,7 @@ class CampaignDetailApiIntegrationTest {
                 .body("10월 10일 오후 6시 신곡 공개")
                 .imageUrl(OLD_IMAGE_URL)
                 .linkUrl("https://example.com/comeback")
-                .targetAgeGroup("20s")
+                .ageGroups(Set.of("20s")).genders(Set.of("all"))
                 .timeStart(timeStart)
                 .timeEnd(timeEnd)
                 .status(CampaignStatus.ACTIVE)
