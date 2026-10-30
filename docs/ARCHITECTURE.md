@@ -34,8 +34,9 @@
 [EC2 메인 서버]
 ├── NGINX (리버스 프록시)
 ├── Spring Boot (API 서버 — 계정/캠페인/배너/클릭 전부 하나의 애플리케이션, 모놀리식+역할분리, MSA 아님)
+├── 클릭 처리 서비스 (P3, Spring, 같은 코드를 별도 실행) → Redis 중복 확인 → Kafka 직접 전송
 ├── PostgreSQL (P1~)
-├── Redis (현재 용도 보류 — 알림 보류로 실질 사용처 없음)
+├── Redis (P3, 2주차~: 상위 N·후보 캐시, 클릭 중복 확인 `notification_id`)
 ├── Kafka (P3, click-events 토픽만)
 └── Prometheus + Grafana (P3, 모니터링)
 
@@ -43,7 +44,7 @@
 ├── PostgreSQL
 └── ClickHouse (P3, OLAP — Kafka Engine + Materialized View)
 
-[Amazon S3] — 원본 클릭 로그 적재 (P3)
+[Amazon S3] — 원본 클릭 로그 적재 (P3, 재집계 서비스가 Kafka 를 읽어 직접 저장)
 ```
 
 **⚠️ 아직 미정**: GitHub 저장소를 모노레포(프론트+백엔드 한 저장소)로 할지, 분리할지 팀 결정 필요.
@@ -68,6 +69,8 @@ React + Vite + Zustand + Tailwind + TanStack Query
 - **OLAP(ClickHouse) 도입 근거**: 멘토 피드백 — "Kafka 원본 테이블에 직접 SELECT하면 응답속도 문제, Roll-up + Materialized View로 미리 집계된 결과 테이블을 따로 둬야 함." → `click_events_kafka`(통로) → MV → `click_facts`(SummingMergeTree, 실제 저장) 구조로 해결.
 - **S3 원시 데이터 보관 이유**: 실시간 집계는 빠르지만 드물게 오차 가능 → 원본을 S3에 그대로 보관, 재집계 서비스가 주기적으로 재계산해 대조/보정.
 - **노출(impression)과 클릭(click) 분리 기록**: CTR = 클릭수 ÷ 노출수 계산을 위해 `ad_impressions` 테이블 별도 존재.
+- **클릭 전송 방식 (2026-10-30 결정)**: 클릭 처리 서비스가 Redis 로 중복을 확인한 뒤 Kafka 로 바로 보낸다. PostgreSQL 중간 표(아웃박스)와 릴레이는 쓰지 않는다. 클릭 원본 쓰기는 하루 비교 뒤 PostgreSQL 에서 끈다.
+- **조정 (2026-10-30 기준)**: 재집계 서비스가 Kafka 에서 읽은 수 = S3 에 쓴 줄 수, S3 고유 `notification_id` 수 = ClickHouse `click_facts` 일별 합계 (재계산 후). 차이 0, 차이는 경고만.
 - **MSA 아님**: "이벤트 기반 워커 분리" 구조. 서비스들이 PostgreSQL/Redis를 공유하고 REST가 아닌 Kafka 큐로만 연결됨.
 
 ---
@@ -117,7 +120,7 @@ CREATE TABLE ad_impressions (  -- 신규: 노출 기록 (클릭률 계산용)
     created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
 );
 
-CREATE TABLE click_events (  -- 클릭 원본 (notification_id UNIQUE로 멱등성 보장)
+CREATE TABLE click_events (  -- 클릭 원본 (2026-10-30: 신규 쓰기 중단, 기존 데이터만 보관. 중복은 Redis 확인)
     click_id BIGINT PRIMARY KEY,
     notification_id VARCHAR(36) UNIQUE REFERENCES ad_impressions(notification_id),
     campaign_id BIGINT,
@@ -125,9 +128,9 @@ CREATE TABLE click_events (  -- 클릭 원본 (notification_id UNIQUE로 멱등�
     clicked_at TIMESTAMP,
     created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
 );
--- 관계: ad_impressions(1) : click_events(0..1)  ※ 1:N 아님, 멱등성으로 중복 클릭 방지
+-- 관계: ad_impressions(1) : click_events(0..1)  ※ 1:N 아님. 중복 클릭은 Redis 확인으로 막음 (2026-10-30)
 
-CREATE TABLE campaign_stats (  -- Phase 1 한정, Phase 3부터 ClickHouse로 역할 이전
+CREATE TABLE campaign_stats (  -- Phase 1 한정, Phase 3부터 ClickHouse로 역할 이전. 클릭 열은 하루 비교 뒤 갱신 중단 (2026-10-30)
     campaign_id BIGINT PRIMARY KEY REFERENCES campaigns(campaign_id),
     sent_count BIGINT,
     click_count BIGINT,
@@ -297,36 +300,51 @@ CREATE TABLE popular_track_ranking (  -- 주변 인기곡 집계 결과. geo_cel
 ### 3-C. ClickHouse (Phase 3, 별도 다이어그램/DB)
 
 ```sql
-CREATE TABLE click_events_kafka (  -- 통로 역할, 저장 안 됨
-    campaign_id BIGINT,
+-- Kafka 에서 읽는 통로 (저장 안 함). 파티션 3 이므로 소비자도 최대 3
+CREATE TABLE click_events_kafka (
     notification_id String,
-    clicked_at DateTime
+    campaign_id     Int64,
+    age_group       String,
+    gender          String,
+    clicked_at      DateTime
 ) ENGINE = Kafka
 SETTINGS kafka_broker_list = 'kafka:9092',
          kafka_topic_list = 'click-events',
          kafka_group_name = 'clickhouse-group',
-         kafka_format = 'JSONEachRow';
+         kafka_format = 'JSONEachRow',
+         kafka_num_consumers = 3;
 
-CREATE TABLE click_facts (  -- 실제 저장되는 롤업 결과
-    campaign_id BIGINT,
-    minute DateTime,
-    click_count UInt32
-) ENGINE = SummingMergeTree()
-ORDER BY (campaign_id, minute);
+-- click_raw 와 click_raw_mv 는 만들지 않는다. 중복은 Redis 확인과 재계산에서 처리한다.
+
+-- 대시보드가 읽는 집계 (분·연령대·성별 합계)
+CREATE TABLE click_facts (
+    campaign_id  Int64,
+    minute       DateTime,
+    age_group    LowCardinality(String),
+    gender       LowCardinality(String),
+    click_count  UInt64
+) ENGINE = SummingMergeTree
+PARTITION BY toYYYYMMDD(minute)
+ORDER BY (campaign_id, minute, age_group, gender);
+
+-- 재계산용 스테이징 (같은 구조)
+CREATE TABLE click_facts_stage AS click_facts;
 
 CREATE MATERIALIZED VIEW click_facts_mv TO click_facts AS
-SELECT campaign_id, toStartOfMinute(clicked_at) AS minute, count() AS click_count
+SELECT campaign_id, toStartOfMinute(clicked_at) AS minute, age_group, gender, count() AS click_count
 FROM click_events_kafka
-GROUP BY campaign_id, minute;
+GROUP BY campaign_id, minute, age_group, gender;
 ```
 
 ### 3-D. S3 (테이블 아님, 파일 저장 규칙)
 
 ```
 버킷: raw-click-data
-경로: raw-clicks/{year}/{month}/{day}/{hour}/*.json
-형식: JSON Lines (한 줄 = 클릭 이벤트 1건)
-필드: notification_id, campaign_id, clicked_at
+경로: raw-clicks/{yyyy}/{MM}/{dd}/{HH}/{배치ID}.json   (날짜는 clicked_at 기준)
+형식: JSON Lines (한 줄 = 클릭 1건)
+필드: notification_id, campaign_id, age_group, gender, clicked_at
+파일 닫기: 1분 경과 또는 1,000건 중 먼저 오는 것
+저장 주체: 재집계 서비스가 Kafka 를 읽어 직접 씀 (2026-10-30)
 ```
 
 ---
@@ -352,3 +370,5 @@ GROUP BY campaign_id, minute;
 - Hello Interview - Ad Click Aggregator (Flink/Kinesis/OLAP 기반 원문 설계 — 규모에 맞게 경량화, 원시/집계 분리·비동기 처리·멱등성·정합성 재검증 원칙만 차용)
 - 우아한형제들 기술 블로그 - "대규모 시스템 설계 기초 2권: 광고 클릭 이벤트 집계" (원시DB/집계DB 분리, 비동기 처리, Druid 롤업 — Druid/맵리듀스는 규모상 제외)
 - AWS 블로그 - Geo-based Real-time Marketing (맥락 데이터 타겟팅 참고용)
+- 벨로그 - "가상 면접 사례로 배우는 대규모 시스템 설계 기초 2: 광고 클릭 이벤트 집계" (Kafka 비동기 전송, Redis 노출 ID 중복 확인, 스트림 먼저 → 캐시 나중)
+- HelloInterview - Ad Click Aggregator 의 Redis 중복 캐시와 S3 아카이브 방식 (2026-10-30 결정 근거)
