@@ -171,7 +171,7 @@ CREATE TABLE recompute_log (
     s3_line_count    BIGINT,                      -- 조정: S3 에 쓴 줄 수 (2026-10-30)
     s3_unique_count  BIGINT,                       -- 조정: S3 고유 notification_id 수
     ch_daily_count  BIGINT,                       -- 조정: ClickHouse click_facts 일별 합계 (【정정 2026-10-29】)
-    reconcile_ok     BOOLEAN,                      -- 세 값이 모두 같은지 (허용 오차 0)
+    reconcile_ok     BOOLEAN,                      -- 두 쌍(읽은 수↔쓴 줄 수, S3 고유↔ClickHouse 합계)이 모두 같은지 (허용 오차 0)
     error_message    TEXT,
     UNIQUE (target_date, started_at)
 );
@@ -183,10 +183,9 @@ CREATE TABLE recompute_log (
 ### 2-9. 만들지 않는 것 / 확인 필요
 
 - **`impression_facts`** (ClickHouse 노출 표): **만들지 않음.** 노출 수는 PostgreSQL `campaign_stats.sent_count` 와 `campaign_minute_stats.sent_count` 에 계속 쌓는다. (결정 3-3-3)
-- **`top_ads_snapshot`**: **만들지 않음 (확정, 2026-10-29).**
+- **`top_ads_snapshot`**: **만들지 않음 (확정, 2026-10-29).** 아래 설명은 이 결정을 따른다.
   - `고도화_계획.md` 6-1 ⑧ 과 11-2: **만들지 않음** (메모리 상태가 없어서 스냅숏 불필요).
-  - `고도화_계획.md` 3-3 ("책의 스냅숏 개념 적용") 과 3-6 ("Redis 상위 N 키는 분마다 결과를 `top_ads_snapshot` 에 남긴다"): **만든다**.
-  - 결정: **만들지 않는다.** 원문 3-3, 3-6 의 해당 문장은 이 결정에 맞춰 고친다 (계획 문서에 반영함). 나중에 Redis 복구 문제가 실제로 생기면 그때 추가한다.
+  - 결정: **만들지 않는다.** Redis 가 날아가면 상위 N 을 분 버킷(또는 ClickHouse)에서 다시 계산한다. 나중에 Redis 복구 문제가 실제로 생기면 그때 추가한다.
 - **`click_facts_hour`, `click_facts_day`** (롤업): **[계획 포함, 4주차 — 2026-10-29 정정].** 통계 API 는 지금 24시간만 허용하지만, 기간을 늘릴 때 바로 쓰도록 미리 계획에 넣었다. 만들 때 ClickHouse 구체화 뷰로 만들고 재계산 때 같이 교체한다 (3-11 원문 참고).
 
 ---
@@ -261,7 +260,7 @@ GROUP BY campaign_id, minute, age_group, gender;
 
 - **구체화 뷰** (`click_facts_mv`, 롤업용 2개). 【정정 2026-10-29: `click_raw_mv` 는 없음】 재계산은 뷰가 아니라 표 교체로 처리한다.
 - `click_facts_mv` 는 Kafka 메시지가 두 번 오면 두 번 더한다 → **실시간 값은 잠정**. 확정은 재계산이 한다.
-【정정 2026-10-29: click_raw 가 없으므로 이 문장은 무효】 - `click_raw` 의 `ReplacingMergeTree` 는 **병합 때** 중복을 없앤다. 병합 전에는 같은 줄이 남아 있을 수 있다. 그래서 재계산은 `GROUP BY notification_id` 로 직접 중복을 없앤다. **[확인 필요]** 조정 쿼리에서 `click_raw` 를 셀 때 `FINAL` 을 붙일지 결정한다.
+- 재계산은 `GROUP BY notification_id` 로 중복을 직접 없앤다 (click_raw 와 FINAL 은 쓰지 않음, 2026-10-30).
 - **재계산 SQL** (3-8, 파티션 교체):
   ```sql
   INSERT INTO click_facts_stage
@@ -445,10 +444,10 @@ s3://<버킷>/raw-clicks/{yyyy}/{MM}/{dd}/{HH}/{배치ID}.json
 | 5 | `campaign_age_groups`, `campaign_genders` 의 PK 여부 | 6-1 ④ "확인 후 생성" | 생성 전에 DB 에서 확인 |
 | 6 | `recompute_log` DDL 없음 | 11-2 "추가", 3-8 목록만 | **확정: 2-8 제안안 승인** |
 | 7 | 운영 Flyway 적용 방식 | 3-6 주의 | **확정: 수동 SQL 적용** (4절) |
-| 8 | `click_raw` 조회 시 `FINAL` 사용 여부 | 6-2 설명만 | 조정 쿼리 작성 때 결정 |
+| 8 | `click_raw` 조회 시 `FINAL` 사용 여부 | — | 해당 없음 (click_raw 없음, 2026-10-30) |
 | 9 | Redis 도입 시점 | 결정 15 | 조회 API 와 같이 vs 이월 |
 | 10 | Kafka 보관 기간 | 결정 4 | 추천 7일 |
-| 11 | `docs/ARCHITECTURE.md` (레포) 가 옛 구조 | develop 기준 `target_age_group`, `click_facts` 에 연령대·성별 없음, `click_raw` 없음 | **레포 PR 로 고친다** (O8, 4주차 이후) |
+| 11 | `docs/ARCHITECTURE.md` (레포) 가 옛 구조 | 3-C·3-D 를 ERD 명세에 맞춤 (2026-10-30, `docs/고도화-계획` 브랜치). develop 반영은 PR 때 | 반영 완료 (브랜치), PR 은 보류 |
 | 12 | `시스템_아키텍처.png` 에 조정·지표 수집 없음 | 고도화 12절 6 | 그림 수정 PR 과 함께 |
 | 13 | 3-2 옛 PK `(campaign_id, minute_bucket)` | 3-2-2 | 6-1 ② 의 PK 4열이 **정본**. 3-2 는 옛 내용 |
 
