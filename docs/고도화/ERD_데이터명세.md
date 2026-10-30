@@ -10,10 +10,10 @@
 
 | 저장소 | 추가 | 수정 | 유지 | 만들지 않음 |
 |---|---|---|---|---|
-| PostgreSQL | 6개 (`campaign_minute_stats`, `campaign_budget`, `campaign_slot_budget`, `refund_ledger`, `outbox_events`, `recompute_log`[확정]) | 3개 (`ad_impressions`, `click_events`, `campaigns`) | 광고 기존 표 전부 (`campaign_stats` 포함) | `top_ads_snapshot` [확인 필요], `impression_facts` (ClickHouse 노출 표) |
+| PostgreSQL | 5개 (`campaign_minute_stats`, `campaign_budget`, `campaign_slot_budget`, `refund_ledger`, `recompute_log`[확정]) | 3개 (`ad_impressions`, `click_events`, `campaigns`) | 광고 기존 표 전부 (`campaign_stats` 포함) | `outbox_events` (2026-10-30 만들지 않음), `top_ads_snapshot` [확인 필요], `impression_facts` (ClickHouse 노출 표) |
 | ClickHouse | 5개 표 + 구체화 뷰 3개 (롤업 포함, 【정정: click_raw 제외】) | — | — | 노출용 표 |
 | S3 | 파일 경로 규칙 1개 (`raw-clicks/`) | — | — | — |
-| Redis | 키 3종 (DB 아님, 캐시) | — | — | — |
+| Redis | 키 4종 (DB 아님, 캐시) | — | — | — |
 
 ---
 
@@ -146,24 +146,12 @@ CREATE TABLE refund_ledger (
 - 기간 종료 후 남은 예산은 `refund_ledger` 에 기록만 한다.
 - 근거: 광고 선택 결정 (`고도화_계획.md` 4절, 4-8).
 
-### 2-7. [1주차 DDL, 3주차부터 사용] `outbox_events` (신규, 발행 누락 방지)
+### 2-7. [삭제, 2026-10-30] `outbox_events` 만들지 않음
 
-```sql
-CREATE TABLE outbox_events (
-    outbox_id       BIGSERIAL    PRIMARY KEY,
-    event_type      VARCHAR(32)  NOT NULL,        -- 'CLICK' 등
-    notification_id VARCHAR(36)  NOT NULL UNIQUE, -- 중복 발행 방지 키
-    payload         JSONB        NOT NULL,        -- 아래 payload 형식 (5절)
-    created_at      TIMESTAMP    NOT NULL,
-    published_at    TIMESTAMP,                    -- NULL 이면 미처리
-    attempts        INT          NOT NULL DEFAULT 0
-);
-CREATE INDEX idx_outbox_unpublished ON outbox_events (created_at) WHERE published_at IS NULL;
-```
+- 클릭은 Kafka 로 바로 보내므로 발행 누락을 막는 중간 표가 필요 없다.
+- 요청 중복은 Redis 확인 (8절 `click:dedupe:{notification_id}`), 집계 중복은 재계산이 막는다.
+- 옛 DDL 과 릴레이 설명은 삭제했다.
 
-- 클릭 저장과 **같은 트랜잭션**에서 INSERT. 릴레이(`OutboxRelay`)가 미발행 행을 읽어 Kafka 로 보내고 `published_at` 을 채운다.
-- 릴레이 여러 개일 때는 `SKIP LOCKED` 로 같은 행을 한 번만 가져간다.
-- 근거: 클릭 저장과 발행 사이의 누락 방지 (`고도화_계획.md` 6-1 ⑦, 2-2).
 
 ### 2-8. [확정] `recompute_log` (재계산·조정 실행 기록, 신규)
 
@@ -179,7 +167,8 @@ CREATE TABLE recompute_log (
     files_read       INT,                          -- S3 에서 읽은 파일 수
     unique_clicks    BIGINT,                       -- notification_id 기준 고유 클릭 수 (S3)
     replaced_total   BIGINT,                       -- 교체 후 click_facts 합계
-    outbox_count    BIGINT,                       -- 조정: outbox_events 행 수 (같은 날짜, 【정정 2026-10-29】)
+    kafka_read_count BIGINT,                      -- 조정: 재집계가 Kafka 에서 읽은 수 (2026-10-30)
+    s3_line_count    BIGINT,                      -- 조정: S3 에 쓴 줄 수 (2026-10-30)
     s3_unique_count  BIGINT,                       -- 조정: S3 고유 notification_id 수
     ch_daily_count  BIGINT,                       -- 조정: ClickHouse click_facts 일별 합계 (【정정 2026-10-29】)
     reconcile_ok     BOOLEAN,                      -- 세 값이 모두 같은지 (허용 오차 0)
@@ -219,7 +208,7 @@ CREATE TABLE recompute_log (
 원문 6-5 와 11절 기준. **운영 DB 는 사용자(민서님)만 접근한다.**
 
 1. 열 추가 (NULL 허용, 기존 기능 영향 없음): 2-1, 2-2
-2. 새 표 생성: 2-3, 2-6, (2-7 은 Kafka 단계), (2-8)
+2. 새 표 생성: 2-3, 2-6, 2-8 (2-7 은 만들지 않음, 2026-10-30)
 3. 인덱스 생성: 2-5 (기존 키 확인 후)
 4. 백필: 3절
 5. **구버전 서버 중지 → SQL 적용 → 새 버전 시작** (PR #111 때와 같은 순서)
@@ -248,7 +237,7 @@ SETTINGS kafka_broker_list = 'kafka:9092',
          kafka_format = 'JSONEachRow',
          kafka_num_consumers = 3;
 
--- 【정정 2026-10-29】 click_raw 와 click_raw_mv 는 만들지 않는다. 중복은 outbox 와 재계산에서 처리한다.
+-- 【정정 2026-10-29】 click_raw 와 click_raw_mv 는 만들지 않는다. 중복은 Redis 확인과 재계산에서 처리한다 (2026-10-30).
 
 -- 대시보드가 읽는 집계 (분·연령대·성별 합계)
 CREATE TABLE click_facts (
@@ -388,13 +377,13 @@ s3://<버킷>/raw-clicks/{yyyy}/{MM}/{dd}/{HH}/{배치ID}.json
 | 파티션 | 3 (시작값, 늘릴 수 있음) |
 | 키 | `campaign_id` (같은 캠페인은 같은 파티션) |
 | 값 | 6-2 와 같은 JSON 한 개 |
-| 전달 보장 | 최소 한 번 (중복 가능) → 클릭 측은 `notification_id` 로 제거 |
-| 보관 기간 | 결정 필요 (추천 7일, S3 장애를 견디는 기간) |
+| 전달 보장 | 최소 한 번 (중복 가능) → 요청은 Redis 확인, 집계는 재계산이 `notification_id` 로 제거 (2026-10-30) |
+| 보관 기간 | 7일 (2026-10-30 채택). 조정은 이 기간 안에 끝나야 함 |
 
-- 발행 주체: `OutboxRelay` (outbox 행 → Kafka). 페이로드는 `outbox_events.payload` 와 같은 형식.
+- 발행 주체: 클릭 처리 서비스 (`ClickEventPublisher`, 직접 전송). 페이로드는 아래 7-1 과 같은 형식.
 - 소비 주체: ClickHouse Kafka 엔진 (`click_events_kafka`), 재집계 서비스 (S3 저장).
 
-### 7-1. outbox `payload` (JSONB)
+### 7-1. Kafka 메시지 값 (JSON)
 
 ```json
 {"notification_id":"...","campaign_id":12,"age_group":"20s","gender":"female","clicked_at":"2026-11-01 07:30:12"}
@@ -411,6 +400,7 @@ s3://<버킷>/raw-clicks/{yyyy}/{MM}/{dd}/{HH}/{배치ID}.json
 | `ad:clicks:{yyyyMMddHHmm}` | Sorted Set | campaign_id → 그 분의 클릭 수 | 2시간 |
 | `ad:top:{window}:{yyyyMMddHHmm}` | Sorted Set | 윈도우 상위 결과 캐시 (상위 5개) | 1분 |
 | `campaign:candidates:{ageGroup}` | String(JSON) | 연령대별 후보 캠페인 목록 | 30~60초 |
+| `click:dedupe:{notification_id}` | String | 클릭 전송 성공 표시 (요청 중복 확인용) | 7일 |
 
 - 상위 N 캐시와 후보 캐시는 Redis 로 한다 (그림대로). Redis 는 2주차 상위 5 API 와 같이 넣으며, 아래 키 설계를 그대로 쓴다 (확정).
 - 캐시 키에는 윈도우 크기를 넣는다 (1분 결과를 5분 질의에 재사용하지 않음).
@@ -427,7 +417,6 @@ s3://<버킷>/raw-clicks/{yyyy}/{MM}/{dd}/{HH}/{배치ID}.json
 | `notification_id` | UUID 문자열 (36자) | 유지. 노출 1건의 전역 식별자, 중복 제거 키 |
 | `campaign_id` | BIGINT | 유지. 모든 집계의 기준 |
 | `click_id` | BIGINT 자동 증가 | 유지. 원본 순번 |
-| `outbox_id` | 없음 | [Kafka] BIGSERIAL |
 | `minute_bucket` | 없음 | [지금] TIMESTAMP (분 단위), 분 버킷 표 키의 일부 |
 | `recompute_id` | 없음 | [제안] IDENTITY (2-8) |
 
@@ -475,7 +464,7 @@ s3://<버킷>/raw-clicks/{yyyy}/{MM}/{dd}/{HH}/{배치ID}.json
 - [ ] [지금] `campaign_budget`, `campaign_slot_budget`, `refund_ledger` (2-6)
 - [ ] [지금] 인덱스 정정 4개 (2-5)
 - [ ] [지금] 백필 (3절)
-- [ ] [Kafka] `outbox_events` (2-7)
+- [x] [삭제] `outbox_events` (2-7, 2026-10-30 만들지 않음)
 - [x] [확정] `recompute_log` (2-8)
 - [ ] [유지] `campaign_stats` (2-4)
 - [x] [제외] `top_ads_snapshot` (확정: 만들지 않음, 2-9)
