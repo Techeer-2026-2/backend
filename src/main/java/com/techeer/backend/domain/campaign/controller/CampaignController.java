@@ -53,7 +53,7 @@ public class CampaignController {
     @ApiResponse(responseCode = "400",
             description = "요청 값 오류, 노출 기간 오류, 빈 이미지(IMAGE_EMPTY) 또는 허용하지 않는 형식(IMAGE_UNSUPPORTED_TYPE)",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(responseCode = "413", description = "이미지가 5MB 를 넘음(IMAGE_TOO_LARGE)",
+    @ApiResponse(responseCode = "413", description = "이미지가 5MB 또는 요청 전체가 6MB 를 넘음(IMAGE_TOO_LARGE)",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "502", description = "이미지 저장소 업로드 실패(IMAGE_UPLOAD_FAILED)",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -113,7 +113,7 @@ public class CampaignController {
     @ApiResponse(responseCode = "400",
             description = "요청 값 오류, 노출 기간 오류 또는 허용하지 않는 이미지 형식(IMAGE_UNSUPPORTED_TYPE)",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(responseCode = "413", description = "이미지가 5MB 를 넘음(IMAGE_TOO_LARGE)",
+    @ApiResponse(responseCode = "413", description = "이미지가 5MB 또는 요청 전체가 6MB 를 넘음(IMAGE_TOO_LARGE)",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "502", description = "이미지 저장소 업로드 실패(IMAGE_UPLOAD_FAILED)",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))

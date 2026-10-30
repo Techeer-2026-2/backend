@@ -29,11 +29,14 @@ public class S3ImageStorage implements ImageStorage {
     public S3ImageStorage(
             S3Client s3Client,
             @Value("${storage.s3.bucket}") String bucket,
+            @Value("${storage.s3.region}") String region,
             @Value("${storage.s3.public-base-url}") String publicBaseUrl) {
         this.s3Client = s3Client;
         this.bucket = bucket;
-        this.publicBaseUrl = publicBaseUrl.endsWith("/")
-                ? publicBaseUrl.substring(0, publicBaseUrl.length() - 1) : publicBaseUrl;
+        // 환경변수가 빈 문자열로 넘어오면 yml 기본값이 적용되지 않으므로 여기서 기본 주소를 만든다.
+        String baseUrl = publicBaseUrl.isBlank()
+                ? "https://" + bucket + ".s3." + region + ".amazonaws.com" : publicBaseUrl.strip();
+        this.publicBaseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
     }
 
     @Override

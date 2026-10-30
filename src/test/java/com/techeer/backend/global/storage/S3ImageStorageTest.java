@@ -28,7 +28,7 @@ class S3ImageStorageTest {
     private static final String BASE_URL = "https://bucket.s3.ap-northeast-2.amazonaws.com";
 
     private final S3Client s3Client = mock(S3Client.class);
-    private final S3ImageStorage storage = new S3ImageStorage(s3Client, "bucket", BASE_URL + "/");
+    private final S3ImageStorage storage = new S3ImageStorage(s3Client, "bucket", "ap-northeast-2", BASE_URL + "/");
 
     private final MockMultipartFile image = new MockMultipartFile("image", "배너.png", "image/png", new byte[] {1});
 
@@ -55,10 +55,20 @@ class S3ImageStorageTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.IMAGE_UPLOAD_FAILED);
 
-        S3ImageStorage noBucket = new S3ImageStorage(s3Client, "", BASE_URL);
+        S3ImageStorage noBucket = new S3ImageStorage(s3Client, "", "ap-northeast-2", BASE_URL);
         assertThatThrownBy(() -> noBucket.upload("campaign-banners", image, ImageType.PNG))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.IMAGE_UPLOAD_FAILED);
+    }
+
+    @Test
+    @DisplayName("공개 주소가 비어 있으면 버킷·리전으로 만든 S3 주소를 쓴다")
+    void usesBucketUrlWhenBaseUrlBlank() {
+        S3ImageStorage defaultUrl = new S3ImageStorage(s3Client, "bucket", "ap-northeast-2", "");
+
+        String url = defaultUrl.upload("campaign-banners", image, ImageType.PNG);
+
+        assertThat(url).startsWith(BASE_URL + "/campaign-banners/");
     }
 
     @Test

@@ -34,7 +34,7 @@ public enum ErrorCode {
     // 이미지 업로드
     IMAGE_EMPTY(HttpStatus.BAD_REQUEST, "빈 이미지 파일은 올릴 수 없습니다."),
     IMAGE_UNSUPPORTED_TYPE(HttpStatus.BAD_REQUEST, "png, jpg, webp 이미지만 올릴 수 있습니다."),
-    IMAGE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "이미지는 5MB 까지 올릴 수 있습니다."),
+    IMAGE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "이미지는 5MB, 요청 전체는 6MB 까지 올릴 수 있습니다."),
     IMAGE_UPLOAD_FAILED(HttpStatus.BAD_GATEWAY, "이미지 업로드에 실패했습니다."),
 
     // 광고주
