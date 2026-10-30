@@ -34,9 +34,16 @@ public class S3ImageStorage implements ImageStorage {
         this.s3Client = s3Client;
         this.bucket = bucket;
         // 환경변수가 빈 문자열로 넘어오면 yml 기본값이 적용되지 않으므로 여기서 기본 주소를 만든다.
-        String baseUrl = publicBaseUrl.isBlank()
-                ? "https://" + bucket + ".s3." + region + ".amazonaws.com" : publicBaseUrl.strip();
+        String baseUrl = publicBaseUrl.isBlank() ? defaultBaseUrl(bucket, region) : publicBaseUrl.strip();
         this.publicBaseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+    }
+
+    /**
+     * 버킷 이름에 점이 있으면 가상 호스트 주소(버킷.s3...)가 S3 인증서와 맞지 않으므로 경로 방식(s3.../버킷)을 쓴다.
+     */
+    private static String defaultBaseUrl(String bucket, String region) {
+        String host = "s3." + region + ".amazonaws.com";
+        return bucket.contains(".") ? "https://" + host + "/" + bucket : "https://" + bucket + "." + host;
     }
 
     @Override

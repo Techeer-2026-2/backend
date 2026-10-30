@@ -72,6 +72,16 @@ class S3ImageStorageTest {
     }
 
     @Test
+    @DisplayName("버킷 이름에 점이 있으면 기본 주소를 경로 방식으로 만든다")
+    void usesPathStyleUrlWhenBucketHasDot() {
+        S3ImageStorage dotted = new S3ImageStorage(s3Client, "my.bucket", "ap-northeast-2", "");
+
+        String url = dotted.upload("campaign-banners", image, ImageType.PNG);
+
+        assertThat(url).startsWith("https://s3.ap-northeast-2.amazonaws.com/my.bucket/campaign-banners/");
+    }
+
+    @Test
     @DisplayName("내 버킷 URL 이면 그 키를 지우고, 외부 URL 이면 아무것도 하지 않는다")
     void deletesOnlyManagedImages() {
         storage.deleteIfManaged(BASE_URL + "/campaign-banners/a.png");
