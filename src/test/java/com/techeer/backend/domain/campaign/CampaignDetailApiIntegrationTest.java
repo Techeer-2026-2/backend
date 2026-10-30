@@ -2,9 +2,14 @@ package com.techeer.backend.domain.campaign;
 
 import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -14,6 +19,8 @@ import com.techeer.backend.domain.campaign.entity.Campaign;
 import com.techeer.backend.domain.campaign.entity.CampaignStatus;
 import com.techeer.backend.domain.campaign.repository.CampaignRepository;
 import com.techeer.backend.domain.stats.repository.CampaignStatsRepository;
+import com.techeer.backend.global.storage.ImageStorage;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 
@@ -25,6 +32,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,14 +40,18 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.RequestBuilder;
+import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 
 /**
  * GET·PATCH·DELETE /api/v1/campaigns/{id} 를 실제 PostgreSQL(Testcontainers)에 붙여 검증한다.
+ * 이미지 저장소(S3)는 가짜로 바꿔 끼운다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -50,6 +62,11 @@ class CampaignDetailApiIntegrationTest {
     private static final Long USER_ID = 1L;
     private static final Long OTHER_USER_ID = 2L;
     private static final Long UNKNOWN_CAMPAIGN_ID = 999_999L;
+    private static final String OLD_IMAGE_URL = "https://example.com/banner.png";
+    private static final String NEW_IMAGE_URL = "https://bucket.s3.ap-northeast-2.amazonaws.com/campaign-banners/b.png";
+
+    @MockitoBean
+    private ImageStorage imageStorage;
 
     @Autowired
     private MockMvc mockMvc;
@@ -65,6 +82,11 @@ class CampaignDetailApiIntegrationTest {
 
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
+
+    @BeforeEach
+    void setUp() {
+        when(imageStorage.upload(anyString(), any(), any())).thenReturn(NEW_IMAGE_URL);
+    }
 
     @AfterEach
     void tearDown() {
@@ -136,9 +158,8 @@ class CampaignDetailApiIntegrationTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_REQUIRED"));
 
-        mockMvc.perform(patch(campaignUrl(campaign))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"title\": \"바뀐 제목\"}"))
+        mockMvc.perform(multipart(HttpMethod.PATCH, campaignUrl(campaign))
+                        .file(jsonPart("{\"title\": \"바뀐 제목\"}")))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_REQUIRED"));
 
@@ -162,22 +183,22 @@ class CampaignDetailApiIntegrationTest {
                         {
                           "title": "바뀐 제목",
                           "body": "바뀐 본문",
-                          "imageUrl": "https://example.com/banner-v2.png",
                           "linkUrl": "https://example.com/new",
                           "targetAgeGroups": ["30s"], "targetGenders": ["all"],
                           "startAt": "%s",
                           "endAt": "%s"
                         }
-                        """.formatted(startAt, endAt)))
+                        """.formatted(startAt, endAt)).file(pngImage()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("바뀐 제목"))
+                .andExpect(jsonPath("$.imageUrl").value(NEW_IMAGE_URL))
                 .andExpect(jsonPath("$.targetAgeGroups[0]").value("30s"))
                 .andExpect(jsonPath("$.status").value("PENDING"));
 
         Campaign updated = reload(campaign);
         assertThat(updated.getTitle()).isEqualTo("바뀐 제목");
         assertThat(updated.getBody()).isEqualTo("바뀐 본문");
-        assertThat(updated.getImageUrl()).isEqualTo("https://example.com/banner-v2.png");
+        assertThat(updated.getImageUrl()).isEqualTo(NEW_IMAGE_URL);
         assertThat(updated.getLinkUrl()).isEqualTo("https://example.com/new");
         assertThat(updated.getAgeGroups()).containsExactly("30s");
         assertThat(updated.getTimeStart()).isEqualTo(startAt);
@@ -201,6 +222,55 @@ class CampaignDetailApiIntegrationTest {
         assertThat(updated.getImageUrl()).isEqualTo(campaign.getImageUrl());
         assertThat(updated.getTimeStart()).isEqualTo(campaign.getTimeStart());
         assertThat(updated.getTimeEnd()).isEqualTo(campaign.getTimeEnd());
+        verify(imageStorage, never()).upload(anyString(), any(), any());
+        verify(imageStorage, never()).deleteIfManaged(anyString());
+    }
+
+    @Test
+    @DisplayName("request 파트 없이 이미지만 보내면 이미지만 바꾸고 이전 이미지를 지운다")
+    void updatesOnlyImage() throws Exception {
+        Campaign campaign = saveOngoingCampaign();
+
+        MockMultipartHttpServletRequestBuilder imageOnly = multipart(HttpMethod.PATCH, campaignUrl(campaign))
+                .file(pngImage());
+        imageOnly.header(HttpHeaders.AUTHORIZATION, bearer(USER_ID));
+        mockMvc.perform(imageOnly)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imageUrl").value(NEW_IMAGE_URL));
+
+        Campaign updated = reload(campaign);
+        assertThat(updated.getImageUrl()).isEqualTo(NEW_IMAGE_URL);
+        assertThat(updated.getTitle()).isEqualTo(campaign.getTitle());
+        verify(imageStorage).deleteIfManaged(OLD_IMAGE_URL);
+    }
+
+    @Test
+    @DisplayName("허용하지 않는 형식의 이미지는 400 을 돌려주고 업로드하지 않는다")
+    void rejectsUnsupportedImageOnUpdate() throws Exception {
+        Campaign campaign = savePendingCampaign();
+
+        mockMvc.perform(patchRequest(campaign, USER_ID, "{\"title\": \"바뀐 제목\"}")
+                        .file(new MockMultipartFile("image", "a.gif", "image/gif", new byte[] {1})))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("IMAGE_UNSUPPORTED_TYPE"));
+
+        assertThat(reload(campaign).getTitle()).isEqualTo(campaign.getTitle());
+        verify(imageStorage, never()).upload(anyString(), any(), any());
+    }
+
+    @Test
+    @DisplayName("이미지를 올린 뒤 수정이 실패하면 새 이미지는 지우고 이전 이미지는 남긴다")
+    void keepsOldImageWhenUpdateFails() throws Exception {
+        Campaign campaign = savePendingCampaign();
+
+        mockMvc.perform(patchRequest(campaign, USER_ID, "{\"startAt\": \"" + daysFromNow(10) + "\"}")
+                        .file(pngImage()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_CAMPAIGN_PERIOD"));
+
+        assertThat(reload(campaign).getImageUrl()).isEqualTo(OLD_IMAGE_URL);
+        verify(imageStorage).deleteIfManaged(NEW_IMAGE_URL);
+        verify(imageStorage, never()).deleteIfManaged(OLD_IMAGE_URL);
     }
 
     @Test
@@ -209,8 +279,8 @@ class CampaignDetailApiIntegrationTest {
         Campaign campaign = saveOngoingCampaign();
 
         mockMvc.perform(patchRequest(campaign, USER_ID, """
-                        {"title": "바뀐 제목", "body": "바뀐 본문", "imageUrl": "https://example.com/banner-v2.png"}
-                        """))
+                        {"title": "바뀐 제목", "body": "바뀐 본문"}
+                        """).file(pngImage()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("바뀐 제목"))
                 .andExpect(jsonPath("$.status").value("ONGOING"));
@@ -227,7 +297,7 @@ class CampaignDetailApiIntegrationTest {
         Campaign updated = reload(campaign);
         assertThat(updated.getTitle()).isEqualTo("바뀐 제목");
         assertThat(updated.getBody()).isEqualTo("바뀐 본문");
-        assertThat(updated.getImageUrl()).isEqualTo("https://example.com/banner-v2.png");
+        assertThat(updated.getImageUrl()).isEqualTo(NEW_IMAGE_URL);
         assertThat(updated.getAgeGroups()).isEqualTo(campaign.getAgeGroups());
         assertThat(updated.getTimeEnd()).isEqualTo(campaign.getTimeEnd());
     }
@@ -258,14 +328,14 @@ class CampaignDetailApiIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
 
-        for (String field : List.of("title", "body", "imageUrl")) {
+        for (String field : List.of("title", "body")) {
             mockMvc.perform(patchRequest(campaign, USER_ID, "{\"" + field + "\": \"   \"}"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
         }
 
         // 전각 공백(U+3000)만 담긴 값도 공백으로 본다.
-        for (String field : List.of("title", "body", "imageUrl")) {
+        for (String field : List.of("title", "body")) {
             mockMvc.perform(patchRequest(campaign, USER_ID, "{\"" + field + "\": \"　\"}"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
@@ -360,7 +430,7 @@ class CampaignDetailApiIntegrationTest {
                 .userId(USER_ID)
                 .title("OOO 컴백 D-3")
                 .body("10월 10일 오후 6시 신곡 공개")
-                .imageUrl("https://example.com/banner.png")
+                .imageUrl(OLD_IMAGE_URL)
                 .linkUrl("https://example.com/comeback")
                 .ageGroups(Set.of("20s")).genders(Set.of("all"))
                 .timeStart(timeStart)
@@ -393,10 +463,19 @@ class CampaignDetailApiIntegrationTest {
         return "/api/v1/campaigns/" + campaign.getCampaignId();
     }
 
-    private RequestBuilder patchRequest(Campaign campaign, Long userId, String json) {
-        return patch(campaignUrl(campaign))
-                .header(HttpHeaders.AUTHORIZATION, bearer(userId))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(json);
+    private MockMultipartHttpServletRequestBuilder patchRequest(Campaign campaign, Long userId, String json) {
+        MockMultipartHttpServletRequestBuilder builder = multipart(HttpMethod.PATCH, campaignUrl(campaign))
+                .file(jsonPart(json));
+        builder.header(HttpHeaders.AUTHORIZATION, bearer(userId));
+        return builder;
+    }
+
+    private MockMultipartFile jsonPart(String json) {
+        return new MockMultipartFile("request", null, MediaType.APPLICATION_JSON_VALUE,
+                json.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private MockMultipartFile pngImage() {
+        return new MockMultipartFile("image", "banner.png", "image/png", new byte[] {1, 2, 3});
     }
 }
