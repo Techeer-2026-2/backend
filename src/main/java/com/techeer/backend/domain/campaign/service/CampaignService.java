@@ -32,6 +32,8 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 @RequiredArgsConstructor
 public class CampaignService {
+    private static final int STATS_QUERY_BATCH_SIZE = 500;
+
 
     private static final String BANNER_DIRECTORY = "campaign-banners";
 
@@ -75,8 +77,23 @@ public class CampaignService {
     @Transactional(readOnly = true)
     public List<CampaignResponse> getMyCampaigns(Long userId, CampaignProgress progress) {
         LocalDateTime now = LocalDateTime.now(clock);
-        return campaignRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId).stream()
-                .map(campaign -> CampaignResponse.of(campaign, now))
+        List<Campaign> campaigns = campaignRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId);
+        // 통계는 캠페인마다 읽지 않고 한 번에 가져온다 (N+1 방지).
+        List<Long> campaignIds = campaigns.stream().map(Campaign::getCampaignId).toList();
+        java.util.Map<Long, com.techeer.backend.domain.stats.entity.CampaignStats> statsById = new java.util.HashMap<>();
+        // ID 를 고정 크기로 나눠 조회한다 (PostgreSQL 바인드 파라미터 한도 65,535 초과 방지).
+        for (int from = 0; from < campaignIds.size(); from += STATS_QUERY_BATCH_SIZE) {
+            List<Long> batch = campaignIds.subList(from, Math.min(from + STATS_QUERY_BATCH_SIZE, campaignIds.size()));
+            campaignStatsRepository.findAllById(batch)
+                    .forEach(stats -> statsById.put(stats.getCampaignId(), stats));
+        }
+        return campaigns.stream()
+                .map(campaign -> {
+                    com.techeer.backend.domain.stats.entity.CampaignStats stats = statsById.get(campaign.getCampaignId());
+                    long sent = stats == null ? 0 : stats.getSentCount();
+                    long clicks = stats == null ? 0 : stats.getClickCount();
+                    return CampaignResponse.of(campaign, now, sent, clicks);
+                })
                 .filter(campaign -> progress == null || campaign.status() == progress)
                 .toList();
     }
