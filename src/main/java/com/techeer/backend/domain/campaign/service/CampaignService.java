@@ -75,8 +75,19 @@ public class CampaignService {
     @Transactional(readOnly = true)
     public List<CampaignResponse> getMyCampaigns(Long userId, CampaignProgress progress) {
         LocalDateTime now = LocalDateTime.now(clock);
-        return campaignRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId).stream()
-                .map(campaign -> CampaignResponse.of(campaign, now))
+        List<Campaign> campaigns = campaignRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId);
+        // 통계는 캠페인마다 읽지 않고 한 번에 가져온다 (N+1 방지).
+        java.util.Map<Long, com.techeer.backend.domain.stats.entity.CampaignStats> statsById = campaignStatsRepository
+                .findAllById(campaigns.stream().map(Campaign::getCampaignId).toList()).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        com.techeer.backend.domain.stats.entity.CampaignStats::getCampaignId, stats -> stats));
+        return campaigns.stream()
+                .map(campaign -> {
+                    com.techeer.backend.domain.stats.entity.CampaignStats stats = statsById.get(campaign.getCampaignId());
+                    long sent = stats == null ? 0 : stats.getSentCount();
+                    long clicks = stats == null ? 0 : stats.getClickCount();
+                    return CampaignResponse.of(campaign, now, sent, clicks);
+                })
                 .filter(campaign -> progress == null || campaign.status() == progress)
                 .toList();
     }

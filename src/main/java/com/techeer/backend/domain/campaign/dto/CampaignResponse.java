@@ -18,9 +18,15 @@ public record CampaignResponse(
         @Schema(description = "노출 시작 시각") LocalDateTime startAt,
         @Schema(description = "노출 종료 시각") LocalDateTime endAt,
         @Schema(description = "진행 상태 (PENDING: 대기, ONGOING: 진행중, ENDED: 종료)") CampaignProgress status,
-        @Schema(description = "등록 시각") LocalDateTime createdAt) {
+        @Schema(description = "등록 시각") LocalDateTime createdAt,
+        @Schema(description = "노출수 (목록 표용)", example = "1200") long impressionCount,
+        @Schema(description = "클릭수 (목록 표용)", example = "300") long clickCount) {
 
     public static CampaignResponse of(Campaign campaign, LocalDateTime now) {
+        return of(campaign, now, 0, 0);
+    }
+
+    public static CampaignResponse of(Campaign campaign, LocalDateTime now, long impressionCount, long clickCount) {
         return new CampaignResponse(
                 campaign.getCampaignId(),
                 campaign.getTitle(),
@@ -32,7 +38,9 @@ public record CampaignResponse(
                 campaign.getTimeStart(),
                 campaign.getTimeEnd(),
                 CampaignProgress.of(campaign.getTimeStart(), campaign.getTimeEnd(), now),
-                campaign.getCreatedAt());
+                campaign.getCreatedAt(),
+                impressionCount,
+                clickCount);
     }
 
     private static List<String> sorted(Set<String> values) {
