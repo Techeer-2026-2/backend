@@ -18,6 +18,7 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /** 명시적으로 ranking-demo 프로필을 선택한 개발 DB에만 가상 청취를 생성한다. */
@@ -62,21 +63,34 @@ public class RankingDemoData implements ApplicationRunner {
             playback.saveTrack(trackId(track), new TrackInput(title(track), ARTISTS[track % ARTISTS.length], null, null,
                     artworkUrl(track), trackTimeMillis(track)));
         }
-        // 직전 한 시간 전에는 곡 배정을 한 칸 밀어 채운다. 곡마다 청취자 수가 같아 동점이면 최근 완주 순으로 순위가 정해지므로,
-        // 두 시간의 순위가 달라져 전체 차트에서 상승·하락 표시(rankChange)를 볼 수 있다.
         Instant previousHour = hour.minus(1, ChronoUnit.HOURS);
-        seedHour(previousHour, 1);
-        seedHour(hour, 0);
+        seedHour(previousHour);
+        seedHour(hour);
         batch.rebuild(previousHour);
         batch.rebuild(hour);
     }
 
-    private void seedHour(Instant hour, int trackShift) {
+    /**
+     * 서버를 켠 뒤에도 매시간 차트가 비지 않도록, 매시 59분에 진행 중인 시간의 청취를 채운다.
+     * 정각의 RankingJobs.catchUp 이 이 시간을 집계한다. 같은 정각에 돌리면 두 작업의 실행 순서가 보장되지 않아 59분에 둔다.
+     * 이벤트는 시간 시작 후 약 53분까지 분포하므로 59분에는 모두 과거 시각이다.
+     */
+    @Scheduled(cron = "0 59 * * * *", zone = "Asia/Seoul")
+    public void seedCurrentHour() {
+        seedHour(clock.instant().truncatedTo(ChronoUnit.HOURS));
+    }
+
+    // 이웃한 시간끼리 곡 배정을 한 칸씩 다르게 민다. 곡마다 청취자 수가 같아 동점이면 최근 완주 순으로 순위가 정해지므로,
+    // 매시간 순위가 달라져 전체 차트에서 상승·하락 표시(rankChange)를 볼 수 있다.
+    // ID 는 시간·순번으로 고정돼 같은 시간을 다시 채워도 중복 저장되지 않는다.
+    private void seedHour(Instant hour) {
+        int trackShift = (int) (hour.getEpochSecond() / 3600 % 2);
         for (int event = 0; event < EVENT_COUNT; event++) {
             int track = (event + trackShift) % TRACK_COUNT;
             GpsPoint point = gpsPoint(event);
             Instant startedAt = hour.plusSeconds(60 + event * 3L);
-            String key = "dataset-1000-gps:" + hour + ":" + event;
+            // 밀기 값까지 키에 넣어, 시간마다 밀기 값이 달랐던 이전 데모 데이터와 세션 ID 가 겹쳐 409 가 나지 않게 한다.
+            String key = "dataset-1000-gps:" + hour + ":" + trackShift + ":" + event;
             UUID sessionId = id("session:" + key);
             LocationInput location = new LocationInput(point.lat(), point.lng(), 5.0 + event % 15,
                     startedAt.minusSeconds(event % 10));
