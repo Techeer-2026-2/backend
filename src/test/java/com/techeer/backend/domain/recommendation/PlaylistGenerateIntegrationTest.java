@@ -207,9 +207,9 @@ class PlaylistGenerateIntegrationTest {
         when(rankingQueryService.nearby(anyDouble(), anyDouble(), anyInt())).thenReturn(new ChartResponse(
                 "성수동 주변", null, null, false, "NEARBY", "READY",
                 List.of(new Item(1, 30, null, new com.techeer.backend.domain.ranking.dto.RankingDtos.Track(
-                                "itunes-1", "비 노래1", "가수1", null, null)),
+                                "itunes-1", "비 노래1", "가수1", null, null, null, null)),
                         new Item(2, 20, null, new com.techeer.backend.domain.ranking.dto.RankingDtos.Track(
-                                "demo-9", "모르는 곡", "누구", null, null)))));
+                                "demo-9", "모르는 곡", "누구", null, null, null, null)))));
 
         mockMvc.perform(post("/api/v1/playlists/generate").header("X-Member-Id", "1")
                         .contentType(MediaType.APPLICATION_JSON)

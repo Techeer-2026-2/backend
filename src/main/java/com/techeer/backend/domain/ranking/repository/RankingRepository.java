@@ -38,7 +38,7 @@ public class RankingRepository {
     public Optional<Track> track(String id) {
         return jdbc.query("SELECT * FROM ranking.track WHERE track_id = ?", (rs, row) ->
                 new Track(rs.getString("track_id"), rs.getString("title"), rs.getString("artist_name"),
-                        rs.getString("preview_url"), rs.getString("external_url")), id).stream().findFirst();
+                        rs.getString("preview_url"), rs.getString("external_url"), null, null), id).stream().findFirst();
     }
 
     public Optional<City> city(String cell) {
@@ -167,7 +167,7 @@ public class RankingRepository {
                 """, (rs, row) -> new Item(rs.getInt("rank"), rs.getLong("unique_listener_count"),
                 rs.getObject("rank_change", Integer.class),
                 new Track(rs.getString("track_id"), rs.getString("title"), rs.getString("artist_name"),
-                        rs.getString("preview_url"), rs.getString("external_url"))),
+                        rs.getString("preview_url"), rs.getString("external_url"), null, null)),
                 ts(hour.minusSeconds(3600)), ts(hour), key, limit);
     }
 
