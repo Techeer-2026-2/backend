@@ -266,6 +266,46 @@ class RankingIntegrationTest {
     }
 
     @Test
+    void chartApisReturnArtworkUrlAndTrackTimeMillis() throws Exception {
+        playback.saveTrack("A", new TrackInput("출근길", "테스트 아티스트", null, null,
+                "https://example.com/cover-a.jpg", 215_000));
+        audience(20, HOUR, location(HOUR));
+        batch.rebuild(HOUR);
+
+        mvc.perform(get("/api/v1/rankings/tracks/global"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].track.id").value("A"))
+                .andExpect(jsonPath("$.data.items[0].track.artworkUrl").value("https://example.com/cover-a.jpg"))
+                .andExpect(jsonPath("$.data.items[0].track.trackTimeMillis").value(215_000));
+        mvc.perform(get("/api/v1/rankings/tracks/nearby?lat=37.5442&lng=127.0561"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].track.artworkUrl").value("https://example.com/cover-a.jpg"))
+                .andExpect(jsonPath("$.data.items[0].track.trackTimeMillis").value(215_000));
+    }
+
+    @Test
+    void savingTrackWithoutArtworkAndDurationClearsThem() {
+        playback.saveTrack("A", new TrackInput("출근길", "테스트 아티스트", null, null,
+                "https://example.com/cover-a.jpg", 215_000));
+        playback.saveTrack("A", new TrackInput("출근길", "테스트 아티스트", null, null));
+        var track = playback.track("A");
+        assertThat(track.artworkUrl()).isNull();
+        assertThat(track.trackTimeMillis()).isNull();
+    }
+
+    @Test
+    void rejectsNonHttpsArtworkAndNonPositiveTrackTime() throws Exception {
+        assertThatThrownBy(() -> playback.saveTrack("A", new TrackInput("곡", "가수", null, null,
+                "http://example.com/cover.jpg", 215_000))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> playback.saveTrack("A", new TrackInput("곡", "가수", null, null,
+                "https://example.com/cover.jpg", 0))).isInstanceOf(BusinessException.class);
+        byte[] body = mapper.writeValueAsBytes(new TrackInput("곡", "가수", null, null,
+                "https://example.com/cover.jpg", -1));
+        mvc.perform(put("/api/v1/music/tracks/A").header(MEMBER, "1").contentType(MediaType.APPLICATION_JSON)
+                .content(body)).andExpect(status().isBadRequest());
+    }
+
+    @Test
     void parentFallbackUsesSavedParentChart() throws Exception {
         String queryCell = geo.cell(37.5442, 127.0561);
         H3Core h3 = H3Core.newInstance();
