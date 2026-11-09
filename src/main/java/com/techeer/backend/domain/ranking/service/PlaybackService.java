@@ -102,6 +102,8 @@ public class PlaybackService {
         require(id != null && !id.isBlank() && id.length() <= 128);
         validateUrl(input.previewUrl());
         validateUrl(input.externalUrl());
+        validateUrl(input.artworkUrl());
+        require(input.trackTimeMillis() == null || input.trackTimeMillis() > 0);
         repository.saveTrack(id, input);
         return track(id);
     }
