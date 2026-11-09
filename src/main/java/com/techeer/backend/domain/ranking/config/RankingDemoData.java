@@ -59,7 +59,8 @@ public class RankingDemoData implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         Instant hour = clock.instant().truncatedTo(ChronoUnit.HOURS).minus(1, ChronoUnit.HOURS);
         for (int track = 0; track < TRACK_COUNT; track++) {
-            playback.saveTrack(trackId(track), new TrackInput(title(track), ARTISTS[track % ARTISTS.length], null, null));
+            playback.saveTrack(trackId(track), new TrackInput(title(track), ARTISTS[track % ARTISTS.length], null, null,
+                    artworkUrl(track), trackTimeMillis(track)));
         }
         // 직전 한 시간 전에는 곡 배정을 한 칸 밀어 채운다. 곡마다 청취자 수가 같아 동점이면 최근 완주 순으로 순위가 정해지므로,
         // 두 시간의 순위가 달라져 전체 차트에서 상승·하락 표시(rankChange)를 볼 수 있다.
@@ -93,6 +94,16 @@ public class RankingDemoData implements ApplicationRunner {
 
     private String title(int track) {
         return "%s · %s".formatted(MOODS[track / SCENES.length], SCENES[track % SCENES.length]);
+    }
+
+    // 곡마다 고정된 샘플 커버. 화면 확인용이라 실제 앨범 커버가 아니다
+    private String artworkUrl(int track) {
+        return "https://picsum.photos/seed/%s/300".formatted(trackId(track));
+    }
+
+    // 2분 30초 ~ 4분 57초 사이로 곡마다 다르게 둔다
+    private int trackTimeMillis(int track) {
+        return 150_000 + track * 3_000;
     }
 
     private GpsPoint gpsPoint(int event) {

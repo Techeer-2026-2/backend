@@ -50,10 +50,11 @@ docker compose up -d db
 1. 곡 등록:
 
 ```json
-{"title":"곡 제목","artistName":"아티스트","previewUrl":null,"externalUrl":null}
+{"title":"곡 제목","artistName":"아티스트","previewUrl":null,"externalUrl":null,
+ "artworkUrl":"https://is1-ssl.mzstatic.com/.../100x100bb.jpg","trackTimeMillis":215000}
 ```
 
-`trackId`는 최대 128자로 음악 공급자의 ID를 그대로 쓸 수 있다. 링크는 HTTPS만 허용한다. 음원 메타데이터 수집·외부 API 호출은 기존 음악 모듈이 담당한다.
+`trackId`는 최대 128자로 음악 공급자의 ID를 그대로 쓸 수 있다. 링크는 HTTPS만 허용한다. `externalUrl`은 외부 음악 서비스의 곡 페이지 링크, `artworkUrl`은 앨범 커버, `trackTimeMillis`는 곡 길이(밀리초)이며 모두 생략할 수 있다. PUT 은 전체 교체라 생략한 값은 null 로 저장된다. 차트 응답의 `track`에도 같은 이름으로 내려가고 null 인 필드는 응답에서 빠진다. 음원 메타데이터 수집·외부 API 호출은 기존 음악 모듈이 담당한다.
 
 2. 재생 시작:
 
