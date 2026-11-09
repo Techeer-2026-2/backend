@@ -7,7 +7,7 @@ recorder: KimKyuBo0411
 ai: Claude
 recorded: 2026-11-09
 discussed: 2026-11-09
-refs: -
+refs: "#116, #117, #118, #119, #120"
 files: db/ranking/V4__track_artwork_duration.sql, domain/ranking/dto/RankingDtos.java, domain/ranking/repository/RankingRepository.java
 summary: 차트 API 의 track 에 artworkUrl·trackTimeMillis 를 내려주기 위해 ranking.track 에 nullable 컬럼 2개를 추가하고 곡 등록 PUT 으로 받는다
 ---
