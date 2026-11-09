@@ -11,6 +11,8 @@ import com.techeer.backend.domain.ranking.entity.RankingModels.City;
 import com.techeer.backend.domain.ranking.entity.RankingModels.Completion;
 import com.techeer.backend.domain.ranking.entity.RankingModels.Score;
 import com.techeer.backend.domain.ranking.entity.RankingModels.Session;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -29,16 +31,18 @@ public class RankingRepository {
 
     public void saveTrack(String id, TrackInput track) {
         jdbc.update("""
-                INSERT INTO ranking.track(track_id, title, artist_name, preview_url, external_url) VALUES (?, ?, ?, ?, ?)
+                INSERT INTO ranking.track(track_id, title, artist_name, preview_url, external_url,
+                    artwork_url, track_time_millis) VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (track_id) DO UPDATE SET title = excluded.title, artist_name = excluded.artist_name,
-                preview_url = excluded.preview_url, external_url = excluded.external_url
-                """, id, track.title(), track.artistName(), track.previewUrl(), track.externalUrl());
+                preview_url = excluded.preview_url, external_url = excluded.external_url,
+                artwork_url = excluded.artwork_url, track_time_millis = excluded.track_time_millis
+                """, id, track.title(), track.artistName(), track.previewUrl(), track.externalUrl(),
+                track.artworkUrl(), track.trackTimeMillis());
     }
 
     public Optional<Track> track(String id) {
-        return jdbc.query("SELECT * FROM ranking.track WHERE track_id = ?", (rs, row) ->
-                new Track(rs.getString("track_id"), rs.getString("title"), rs.getString("artist_name"),
-                        rs.getString("preview_url"), rs.getString("external_url"), null, null), id).stream().findFirst();
+        return jdbc.query("SELECT * FROM ranking.track WHERE track_id = ?", (rs, row) -> track(rs), id)
+                .stream().findFirst();
     }
 
     public Optional<City> city(String cell) {
@@ -165,9 +169,7 @@ public class RankingRepository {
                     AND (r.scope_key <> 'GLOBAL' OR r.unique_listener_count >= 20)
                 ORDER BY r.rank LIMIT ?
                 """, (rs, row) -> new Item(rs.getInt("rank"), rs.getLong("unique_listener_count"),
-                rs.getObject("rank_change", Integer.class),
-                new Track(rs.getString("track_id"), rs.getString("title"), rs.getString("artist_name"),
-                        rs.getString("preview_url"), rs.getString("external_url"), null, null)),
+                rs.getObject("rank_change", Integer.class), track(rs)),
                 ts(hour.minusSeconds(3600)), ts(hour), key, limit);
     }
 
@@ -176,6 +178,13 @@ public class RankingRepository {
                 INSERT INTO ranking.batch_attempt(ranked_hour, finished_at, status, duration_ms, error_type)
                 VALUES (?, ?, ?, ?, ?)
                 """, ts(hour), ts(finishedAt), status, durationMs, errorType);
+    }
+
+    /** ranking.track 의 컬럼(t.* 포함)을 응답용 Track 으로 옮긴다. */
+    private Track track(ResultSet rs) throws SQLException {
+        return new Track(rs.getString("track_id"), rs.getString("title"), rs.getString("artist_name"),
+                rs.getString("preview_url"), rs.getString("external_url"), rs.getString("artwork_url"),
+                rs.getObject("track_time_millis", Integer.class));
     }
 
     private Timestamp ts(Instant instant) {
