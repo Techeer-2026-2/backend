@@ -5,6 +5,7 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -45,14 +46,26 @@ public final class RankingDtos {
             @NotNull Instant occurredAt) {
     }
 
+    /**
+     * @param artworkUrl      앨범 커버 이미지 URL (HTTPS)
+     * @param trackTimeMillis 곡 길이(밀리초). 음악 검색 응답의 trackTimeMillis 와 같은 단위
+     */
     public record TrackInput(
             @NotBlank @Size(max = 256) String title,
             @NotBlank @Size(max = 256) String artistName,
             @Size(max = 2048) String previewUrl,
-            @Size(max = 2048) String externalUrl) {
+            @Size(max = 2048) String externalUrl,
+            @Size(max = 2048) String artworkUrl,
+            @Positive Integer trackTimeMillis) {
+
+        /** 커버·곡 길이 없이 등록하는 기존 호출(데모 데이터, 테스트)용 */
+        public TrackInput(String title, String artistName, String previewUrl, String externalUrl) {
+            this(title, artistName, previewUrl, externalUrl, null, null);
+        }
     }
 
-    public record Track(String id, String title, String artistName, String previewUrl, String externalUrl) {
+    public record Track(String id, String title, String artistName, String previewUrl, String externalUrl,
+                        String artworkUrl, Integer trackTimeMillis) {
     }
 
     public record SessionResult(UUID sessionId, boolean created, String locationStatus) {
