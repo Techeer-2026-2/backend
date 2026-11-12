@@ -33,6 +33,10 @@ public class AdImpression extends BaseEntity {
     @Column(nullable = false)
     private LocalDateTime shownAt;
 
+    /** 이 노출로 캠페인 예산에서 실제 차감한 금액(원). 날짜별 소진액·CPC·CPM 계산에 쓴다. */
+    @Column(nullable = false)
+    private long chargedAmount;
+
     /**
      * 빌더에서 전달한 식별자와 노출 시각으로 배너 노출 엔티티를 생성한다.
      *
@@ -40,12 +44,15 @@ public class AdImpression extends BaseEntity {
      * @param campaignId 노출된 캠페인 ID
      * @param targetUserId 노출 대상 사용자 ID
      * @param shownAt 배너가 노출된 시각
+     * @param chargedAmount 이 노출로 차감한 금액(원)
      */
     @Builder
-    private AdImpression(String notificationId, Long campaignId, Long targetUserId, LocalDateTime shownAt) {
+    private AdImpression(String notificationId, Long campaignId, Long targetUserId, LocalDateTime shownAt,
+            long chargedAmount) {
         this.notificationId = notificationId;
         this.campaignId = campaignId;
         this.targetUserId = targetUserId;
         this.shownAt = shownAt;
+        this.chargedAmount = chargedAmount;
     }
 }
