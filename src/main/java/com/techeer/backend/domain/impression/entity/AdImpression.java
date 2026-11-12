@@ -33,8 +33,11 @@ public class AdImpression extends BaseEntity {
     @Column(nullable = false)
     private LocalDateTime shownAt;
 
-    /** 이 노출로 캠페인 예산에서 실제 차감한 금액(원). 날짜별 소진액·CPC·CPM 계산에 쓴다. */
-    @Column(nullable = false)
+    /**
+     * 이 노출로 캠페인 예산에서 실제 차감한 금액(원). 날짜별 소진액·CPC·CPM 계산에 쓴다.
+     * 컬럼 기본값 0 은 이 컬럼을 모르는 SQL INSERT(기존 테스트 등)가 깨지지 않게 하려는 것이다.
+     */
+    @Column(nullable = false, columnDefinition = "bigint default 0")
     private long chargedAmount;
 
     /**
