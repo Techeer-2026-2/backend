@@ -228,6 +228,7 @@ class BannerApiIntegrationTest {
                 .timeStart(timeStart)
                 .timeEnd(timeEnd)
                 .status(CampaignStatus.ACTIVE)
+                .totalBudget(100_000).bidPrice(50).targetClicks(300)
                 .build());
     }
 
@@ -250,6 +251,7 @@ class BannerApiIntegrationTest {
                 .timeStart(timeStart)
                 .timeEnd(timeEnd)
                 .status(status)
+                .totalBudget(100_000).bidPrice(50).targetClicks(300)
                 .build());
     }
 

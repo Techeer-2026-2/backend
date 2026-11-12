@@ -290,6 +290,7 @@ class CampaignStatsStreamApiIntegrationTest {
                 .body("오전 9시 전 주문 시 1+1")
                 .ageGroups(Set.of("20s")).genders(Set.of("all"))
                 .status(CampaignStatus.ACTIVE)
+                .totalBudget(100_000).bidPrice(50).targetClicks(300)
                 .build());
     }
 

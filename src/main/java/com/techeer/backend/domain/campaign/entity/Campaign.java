@@ -72,10 +72,26 @@ public class Campaign extends BaseEntity {
     @Column(nullable = false, length = 16)
     private CampaignStatus status;
 
+    /** 총 예산(원). 누적 소진액이 이 값을 넘지 않는 동안만 노출된다. */
+    @Column(nullable = false)
+    private long totalBudget;
+
+    /** 노출 1회당 최대로 낼 수 있는 금액(원). 실제 차감액은 경쟁 상황에 따라 이보다 작을 수 있다. */
+    @Column(nullable = false)
+    private long bidPrice;
+
+    /** 지금까지 실제로 차감된 금액의 합(원). 등록 시 0 에서 시작한다. */
+    @Column(nullable = false)
+    private long spentTotal;
+
+    /** 광고주가 목표로 잡은 클릭수. 지금은 저장하고 보여주기만 한다. */
+    @Column(nullable = false)
+    private long targetClicks;
+
     @Builder
     private Campaign(Long userId, String title, String body, String imageUrl, String linkUrl,
             Set<String> ageGroups, Set<String> genders, LocalDateTime timeStart, LocalDateTime timeEnd,
-            CampaignStatus status) {
+            CampaignStatus status, long totalBudget, long bidPrice, long targetClicks) {
         this.userId = userId;
         this.title = title;
         this.body = body;
@@ -86,6 +102,31 @@ public class Campaign extends BaseEntity {
         this.timeStart = timeStart;
         this.timeEnd = timeEnd;
         this.status = status;
+        this.totalBudget = totalBudget;
+        this.bidPrice = bidPrice;
+        this.spentTotal = 0;
+        this.targetClicks = targetClicks;
+    }
+
+    /** 남은 예산(원) = 총 예산 - 누적 소진액. 저장하지 않고 그때그때 계산한다. */
+    public long getRemainingBudget() {
+        return totalBudget - spentTotal;
+    }
+
+    /**
+     * 예산·입찰가·목표 클릭수를 바꾼다. null 인 값은 그대로 둔다.
+     * 진행중·종료 캠페인에서 호출되지 않도록 막는 것은 서비스의 몫이다.
+     */
+    public void updateBilling(Long totalBudget, Long bidPrice, Long targetClicks) {
+        if (totalBudget != null) {
+            this.totalBudget = totalBudget;
+        }
+        if (bidPrice != null) {
+            this.bidPrice = bidPrice;
+        }
+        if (targetClicks != null) {
+            this.targetClicks = targetClicks;
+        }
     }
 
     /**

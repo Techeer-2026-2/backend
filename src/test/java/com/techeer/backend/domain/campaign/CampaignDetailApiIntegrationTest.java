@@ -106,7 +106,12 @@ class CampaignDetailApiIntegrationTest {
                 .andExpect(jsonPath("$.title").value(campaign.getTitle()))
                 .andExpect(jsonPath("$.status").value("ONGOING"))
                 .andExpect(jsonPath("$.impressionCount").value(1200))
-                .andExpect(jsonPath("$.clickCount").value(300));
+                .andExpect(jsonPath("$.clickCount").value(300))
+                .andExpect(jsonPath("$.totalBudget").value(100000))
+                .andExpect(jsonPath("$.bidPrice").value(50))
+                .andExpect(jsonPath("$.spentTotal").value(0))
+                .andExpect(jsonPath("$.remainingBudget").value(100000))
+                .andExpect(jsonPath("$.targetClicks").value(300));
     }
 
     @Test
@@ -206,6 +211,49 @@ class CampaignDetailApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("대기 상태 캠페인은 예산·입찰가·목표 클릭수를 수정할 수 있다")
+    void updatesBillingWhilePending() throws Exception {
+        Campaign campaign = savePendingCampaign();
+
+        mockMvc.perform(patchRequest(campaign, USER_ID,
+                        "{\"totalBudget\": 200000, \"bidPrice\": 80, \"targetClicks\": 500}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalBudget").value(200000))
+                .andExpect(jsonPath("$.bidPrice").value(80))
+                .andExpect(jsonPath("$.remainingBudget").value(200000))
+                .andExpect(jsonPath("$.targetClicks").value(500));
+
+        Campaign updated = reload(campaign);
+        assertThat(updated.getTotalBudget()).isEqualTo(200_000);
+        assertThat(updated.getBidPrice()).isEqualTo(80);
+        assertThat(updated.getTargetClicks()).isEqualTo(500);
+    }
+
+    @Test
+    @DisplayName("수정 결과 입찰가가 총 예산보다 크면 400 을 돌려주고 반영하지 않는다")
+    void rejectsBidOverBudgetOnUpdate() throws Exception {
+        Campaign campaign = savePendingCampaign();
+
+        // 예산만 보내도 기존 입찰가(50)와 비교한다.
+        mockMvc.perform(patchRequest(campaign, USER_ID, "{\"totalBudget\": 49}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CAMPAIGN_BID_EXCEEDS_BUDGET"));
+
+        // 입찰가만 보내도 기존 예산(100000)과 비교한다.
+        mockMvc.perform(patchRequest(campaign, USER_ID, "{\"bidPrice\": 100001}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CAMPAIGN_BID_EXCEEDS_BUDGET"));
+
+        mockMvc.perform(patchRequest(campaign, USER_ID, "{\"totalBudget\": 0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+
+        Campaign unchanged = reload(campaign);
+        assertThat(unchanged.getTotalBudget()).isEqualTo(100_000);
+        assertThat(unchanged.getBidPrice()).isEqualTo(50);
+    }
+
+    @Test
     @DisplayName("보내지 않은 필드는 그대로 두고, 빈 linkUrl 은 링크를 지운다")
     void updatesOnlyGivenFields() throws Exception {
         Campaign campaign = savePendingCampaign();
@@ -294,7 +342,17 @@ class CampaignDetailApiIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CAMPAIGN_FIELD_NOT_EDITABLE"));
 
+        for (String billing : new String[] {
+                "{\"totalBudget\": 200000}", "{\"bidPrice\": 80}", "{\"targetClicks\": 500}"}) {
+            mockMvc.perform(patchRequest(campaign, USER_ID, billing))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("CAMPAIGN_FIELD_NOT_EDITABLE"));
+        }
+
         Campaign updated = reload(campaign);
+        assertThat(updated.getTotalBudget()).isEqualTo(campaign.getTotalBudget());
+        assertThat(updated.getBidPrice()).isEqualTo(campaign.getBidPrice());
+        assertThat(updated.getTargetClicks()).isEqualTo(campaign.getTargetClicks());
         assertThat(updated.getTitle()).isEqualTo("바뀐 제목");
         assertThat(updated.getBody()).isEqualTo("바뀐 본문");
         assertThat(updated.getImageUrl()).isEqualTo(NEW_IMAGE_URL);
@@ -436,6 +494,7 @@ class CampaignDetailApiIntegrationTest {
                 .timeStart(timeStart)
                 .timeEnd(timeEnd)
                 .status(CampaignStatus.ACTIVE)
+                .totalBudget(100_000).bidPrice(50).targetClicks(300)
                 .build());
     }
 
