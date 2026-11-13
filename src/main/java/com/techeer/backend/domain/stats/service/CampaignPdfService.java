@@ -64,10 +64,10 @@ public class CampaignPdfService {
             document.add(new Paragraph("날짜별 노출, 클릭, CTR", bodyFont));
             document.add(new Paragraph(" "));
 
-            PdfPTable table = new PdfPTable(4);
+            PdfPTable table = new PdfPTable(7);
             table.setWidthPercentage(100);
             table.setHeaderRows(1);
-            for (String header : new String[] {"날짜", "노출 수", "클릭 수", "CTR(%)"}) {
+            for (String header : new String[] {"날짜", "노출 수", "클릭 수", "CTR(%)", "집행액(원)", "CPC(원)", "CPM(원)"}) {
                 table.addCell(cell(header, bodyFont));
             }
             for (CampaignTimeseriesBucket bucket : buckets) {
@@ -75,6 +75,9 @@ public class CampaignPdfService {
                 table.addCell(cell(String.valueOf(bucket.impressionCount()), bodyFont));
                 table.addCell(cell(String.valueOf(bucket.clickCount()), bodyFont));
                 table.addCell(cell(String.valueOf(bucket.ctr()), bodyFont));
+                table.addCell(cell(String.valueOf(bucket.spentAmount()), bodyFont));
+                table.addCell(cell(String.valueOf(bucket.cpc()), bodyFont));
+                table.addCell(cell(String.valueOf(bucket.cpm()), bodyFont));
             }
             document.add(table);
             document.close();
