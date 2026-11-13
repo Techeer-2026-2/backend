@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 캠페인의 노출·클릭 추이를 시간 또는 일 단위로 만든다.
+ * 캠페인의 노출·클릭·소진액 추이와 CTR·CPC·CPM 을 시간 또는 일 단위로 만든다.
  * 노출과 클릭은 각각 원본 표(ad_impressions, click_events)를 센다. 기록이 없는 구간은 0으로 채운다.
  */
 @Service
@@ -72,13 +72,15 @@ public class CampaignTimeseriesService {
 
         Map<LocalDateTime, Long> impressions = toCounts(adImpressionRepository.countByBucket(campaignId, unit, start, end));
         Map<LocalDateTime, Long> clicks = toCounts(clickEventRepository.countByBucket(campaignId, unit, start, end));
+        Map<LocalDateTime, Long> spent = toCounts(adImpressionRepository.sumChargedByBucket(campaignId, unit, start, end));
 
         java.util.ArrayList<CampaignTimeseriesBucket> result = new java.util.ArrayList<>();
         for (LocalDateTime bucket = firstBucket; bucket.isBefore(end); bucket = bucket.plus(1, step)) {
             result.add(CampaignTimeseriesBucket.of(
                     bucket,
                     impressions.getOrDefault(bucket, 0L),
-                    clicks.getOrDefault(bucket, 0L)));
+                    clicks.getOrDefault(bucket, 0L),
+                    spent.getOrDefault(bucket, 0L)));
         }
         return result;
     }
