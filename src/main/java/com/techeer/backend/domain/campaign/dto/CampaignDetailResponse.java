@@ -25,6 +25,10 @@ public record CampaignDetailResponse(
         @Schema(description = "누적 소진액(원)", example = "32000") long spentTotal,
         @Schema(description = "남은 예산(원) = 총 예산 - 누적 소진액", example = "68000") long remainingBudget,
         @Schema(description = "목표 클릭수", example = "300") long targetClicks,
+        @Schema(description = "예산 소진율(%) = 누적 소진액 ÷ 총 예산 × 100. 총 예산이 0이면 0",
+                example = "32.0") double budgetUsageRate,
+        @Schema(description = "목표 클릭 달성률(%) = 클릭수 ÷ 목표 클릭수 × 100. 목표가 0이면 0",
+                example = "100.0") double targetClickRate,
         @Schema(description = "등록 시각") LocalDateTime createdAt,
         @Schema(description = "마지막 수정 시각") LocalDateTime updatedAt) {
 
@@ -48,8 +52,18 @@ public record CampaignDetailResponse(
                 campaign.getSpentTotal(),
                 campaign.getRemainingBudget(),
                 campaign.getTargetClicks(),
+                percent(campaign.getSpentTotal(), campaign.getTotalBudget()),
+                percent(clickCount, campaign.getTargetClicks()),
                 campaign.getCreatedAt(),
                 campaign.getUpdatedAt());
+    }
+
+    /** part ÷ whole × 100 을 소수 둘째 자리로 반올림한다. whole 이 0 이면 0. */
+    public static double percent(long part, long whole) {
+        if (whole <= 0) {
+            return 0.0;
+        }
+        return Math.round((double) part / whole * 10000) / 100.0;
     }
 
     private static List<String> sorted(Set<String> values) {
