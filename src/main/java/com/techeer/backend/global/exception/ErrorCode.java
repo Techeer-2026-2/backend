@@ -68,6 +68,8 @@ public enum ErrorCode {
 
     // 외부 API (카카오·TMAP·iTunes 등)
     EXTERNAL_API_ERROR(HttpStatus.BAD_GATEWAY, "외부 API 호출에 실패했습니다."),
+    AI_CALL_FAILED(HttpStatus.BAD_GATEWAY, "AI 요약 호출에 실패했습니다."),
+    AI_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "AI 요약 키가 설정되지 않았습니다."),
 
     // 음악 앱 통근 세션
     COMMUTE_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않거나 진행 중인 통근이 없습니다."),
