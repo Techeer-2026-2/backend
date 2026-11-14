@@ -75,6 +75,10 @@ public class BannerService {
         };
     }
 
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
+    }
+
     private BannerResponse recordImpression(Campaign campaign, TargetUser targetUser, long charge,
             LocalDateTime now) {
         String notificationId = UUID.randomUUID().toString();
@@ -84,6 +88,8 @@ public class BannerService {
                 .targetUserId(targetUser.getTargetUserId())
                 .shownAt(now)
                 .chargedAmount(charge)
+                .ageGroup(blankToNull(targetUser.getAgeGroup()))
+                .gender(blankToNull(toGenderCode(targetUser.getGender())))
                 .build());
         campaignStatsRepository.increaseSentCount(campaign.getCampaignId(), now);
         return BannerResponse.of(notificationId, campaign);

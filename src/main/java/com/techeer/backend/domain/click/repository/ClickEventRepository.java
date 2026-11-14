@@ -55,4 +55,21 @@ public interface ClickEventRepository extends JpaRepository<ClickEvent, Long> {
             @Param("unit") String unit,
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to);
+
+    /**
+     * 캠페인의 클릭을 노출의 연령대별로 센다. 클릭은 notification_id 로 노출과 연결한다.
+     *
+     * @return 각 행은 [연령대(String 또는 null), 클릭 수(Number)]
+     */
+    @Query(value = """
+            SELECT i.age_group, COUNT(*) AS cnt
+            FROM click_events c
+            JOIN ad_impressions i ON i.notification_id = c.notification_id
+            WHERE c.campaign_id = :campaignId AND c.clicked_at >= :from AND c.clicked_at < :to
+            GROUP BY i.age_group
+            """, nativeQuery = true)
+    List<Object[]> countByAgeGroup(
+            @Param("campaignId") Long campaignId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
 }

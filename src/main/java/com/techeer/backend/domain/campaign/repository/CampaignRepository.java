@@ -64,6 +64,7 @@ public interface CampaignRepository extends JpaRepository<Campaign, Long> {
             UPDATE campaigns
             SET spent_total = spent_total + :amount
             WHERE campaign_id = :campaignId
+              AND deleted_at IS NULL
               AND spent_total + :amount <= total_budget
             """, nativeQuery = true)
     int deductBudget(@Param("campaignId") Long campaignId, @Param("amount") long amount);
