@@ -12,8 +12,11 @@ import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,7 +35,10 @@ public class BannerService {
     private final Clock clock;
 
     /**
-     * @return 매칭되는 진행 중 캠페인이 없으면 empty
+     * 후보 중 입찰가에 비례한 확률로 1개를 골라 예산을 차감하고 노출을 기록한다.
+     * 고른 캠페인의 예산이 그 사이 모자라졌으면 그 캠페인을 빼고 다시 고른다.
+     *
+     * @return 매칭되는, 예산이 남은 진행 중 캠페인이 없으면 empty
      */
     @Transactional
     public Optional<BannerResponse> matchBanner(Long targetUserId) {
@@ -40,8 +46,17 @@ public class BannerService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.TARGET_USER_NOT_FOUND));
 
         LocalDateTime now = LocalDateTime.now(clock);
-        return campaignRepository.findRandomActiveForTarget(targetUser.getAgeGroup(), toGenderCode(targetUser.getGender()), now)
-                .map(campaign -> recordImpression(campaign, targetUser, now));
+        List<Campaign> candidates = new ArrayList<>(campaignRepository.findActiveForTarget(
+                targetUser.getAgeGroup(), toGenderCode(targetUser.getGender()), now));
+        while (!candidates.isEmpty()) {
+            Campaign winner = BidAuction.pick(candidates, ThreadLocalRandom.current().nextDouble());
+            long charge = BidAuction.charge(winner, candidates);
+            if (campaignRepository.deductBudget(winner.getCampaignId(), charge) == 1) {
+                return Optional.of(recordImpression(winner, targetUser, charge, now));
+            }
+            candidates.remove(winner);
+        }
+        return Optional.empty();
     }
 
     /**
@@ -60,13 +75,15 @@ public class BannerService {
         };
     }
 
-    private BannerResponse recordImpression(Campaign campaign, TargetUser targetUser, LocalDateTime now) {
+    private BannerResponse recordImpression(Campaign campaign, TargetUser targetUser, long charge,
+            LocalDateTime now) {
         String notificationId = UUID.randomUUID().toString();
         adImpressionRepository.save(AdImpression.builder()
                 .notificationId(notificationId)
                 .campaignId(campaign.getCampaignId())
                 .targetUserId(targetUser.getTargetUserId())
                 .shownAt(now)
+                .chargedAmount(charge)
                 .build());
         campaignStatsRepository.increaseSentCount(campaign.getCampaignId(), now);
         return BannerResponse.of(notificationId, campaign);
