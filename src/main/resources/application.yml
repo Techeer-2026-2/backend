@@ -96,6 +96,11 @@ external:
   tmap:
     base-url: https://apis.openapi.sk.com
     app-key: ${TMAP_APP_KEY:}
+  claude:
+    # 캠페인 성과 AI 요약. 키는 환경변수로만 받는다 (비어 있으면 요약 API 가 503)
+    base-url: https://api.anthropic.com
+    api-key: ${ANTHROPIC_API_KEY:}
+    model: claude-sonnet-5-5
 
 # ---------- 이미지 저장소(S3) ----------
 storage:

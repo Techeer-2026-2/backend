@@ -2,6 +2,7 @@ package com.techeer.backend.domain.click.repository;
 
 import com.techeer.backend.domain.click.entity.ClickEvent;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -36,4 +37,22 @@ public interface ClickEventRepository extends JpaRepository<ClickEvent, Long> {
             @Param("campaignId") Long campaignId,
             @Param("targetUserId") Long targetUserId,
             @Param("clickedAt") LocalDateTime clickedAt);
+
+    /**
+     * 캠페인의 클릭을 시간(hour) 또는 일(day) 구간별로 센다.
+     *
+     * @param unit date_trunc 단위 ("hour" 또는 "day")
+     * @return 각 행은 [구간 시작 시각(Timestamp), 클릭 수(Number)]
+     */
+    @Query(value = """
+            SELECT date_trunc(CAST(:unit AS text), clicked_at) AS bucket, COUNT(*) AS cnt
+            FROM click_events
+            WHERE campaign_id = :campaignId AND clicked_at >= :from AND clicked_at < :to
+            GROUP BY bucket
+            """, nativeQuery = true)
+    List<Object[]> countByBucket(
+            @Param("campaignId") Long campaignId,
+            @Param("unit") String unit,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
 }
