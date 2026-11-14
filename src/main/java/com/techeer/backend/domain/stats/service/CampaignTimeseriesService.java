@@ -77,13 +77,15 @@ public class CampaignTimeseriesService {
 
         Map<LocalDateTime, Long> impressions = toCounts(adImpressionRepository.countByBucket(campaignId, unit, start, end));
         Map<LocalDateTime, Long> clicks = toCounts(clickEventRepository.countByBucket(campaignId, unit, start, end));
+        Map<LocalDateTime, Long> spent = toCounts(adImpressionRepository.sumChargedByBucket(campaignId, unit, start, end));
 
         java.util.ArrayList<CampaignTimeseriesBucket> result = new java.util.ArrayList<>();
         for (LocalDateTime bucket = firstBucket; bucket.isBefore(end); bucket = bucket.plus(1, step)) {
             result.add(CampaignTimeseriesBucket.of(
                     bucket,
                     impressions.getOrDefault(bucket, 0L),
-                    clicks.getOrDefault(bucket, 0L)));
+                    clicks.getOrDefault(bucket, 0L),
+                    spent.getOrDefault(bucket, 0L)));
         }
         return result;
     }
