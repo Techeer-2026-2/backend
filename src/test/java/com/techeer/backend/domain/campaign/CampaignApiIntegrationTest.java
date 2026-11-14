@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -396,6 +397,31 @@ class CampaignApiIntegrationTest {
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
     }
 
+    @Test
+    @DisplayName("진행중 캠페인을 일시정지하면 PAUSED 가 되고, 재개하면 다시 ACTIVE 가 된다")
+    void pauseAndResumeChangeStatus() throws Exception {
+        Campaign campaign = saveCampaign(USER_ID, "정지 테스트", daysFromNow(-1), daysFromNow(1));
+        mockMvc.perform(actionRequest("pause", campaign.getCampaignId(), USER_ID))
+                .andExpect(status().isNoContent());
+        assertThat(campaignRepository.findById(campaign.getCampaignId()).orElseThrow().getStatus())
+                .isEqualTo(CampaignStatus.PAUSED);
+
+        mockMvc.perform(actionRequest("resume", campaign.getCampaignId(), USER_ID))
+                .andExpect(status().isNoContent());
+        assertThat(campaignRepository.findById(campaign.getCampaignId()).orElseThrow().getStatus())
+                .isEqualTo(CampaignStatus.ACTIVE);
+    }
+
+    @Test
+    @DisplayName("이미 일시정지된 캠페인을 다시 일시정지하면 409 를 돌려준다")
+    void pauseTwiceIsConflict() throws Exception {
+        Campaign campaign = saveCampaign(USER_ID, "중복 정지", daysFromNow(-1), daysFromNow(1));
+        mockMvc.perform(actionRequest("pause", campaign.getCampaignId(), USER_ID)).andExpect(status().isNoContent());
+        mockMvc.perform(actionRequest("pause", campaign.getCampaignId(), USER_ID))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CAMPAIGN_STATUS_CONFLICT"));
+    }
+
     private Campaign saveCampaign(Long userId, String title, LocalDateTime timeStart, LocalDateTime timeEnd) {
         return campaignRepository.save(Campaign.builder()
                 .userId(userId)
@@ -458,6 +484,51 @@ class CampaignApiIntegrationTest {
 
     private MockMultipartFile pngImage() {
         return new MockMultipartFile("image", "banner.png", "image/png", new byte[] {1, 2, 3});
+    }
+
+    @Test
+    @DisplayName("진행중 캠페인을 재개하면 409 를 돌려준다")
+    void resumeWhenActiveIsConflict() throws Exception {
+        Campaign campaign = saveCampaign(USER_ID, "재개 충돌", daysFromNow(-1), daysFromNow(1));
+        mockMvc.perform(actionRequest("resume", campaign.getCampaignId(), USER_ID))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CAMPAIGN_STATUS_CONFLICT"));
+    }
+
+    @Test
+    @DisplayName("일시정지하면 배너 매칭에서 빠지고, 재개하면 다시 들어온다")
+    void pauseRemovesFromBannerMatchingUntilResumed() throws Exception {
+        LocalDateTime now = LocalDateTime.now(clock);
+        Campaign campaign = campaignRepository.save(Campaign.builder()
+                .userId(USER_ID)
+                .title("배너 매칭")
+                .body("본문")
+                .imageUrl("https://example.com/match.png")
+                .ageGroups(new java.util.HashSet<>(java.util.List.of("20s")))
+                .genders(new java.util.HashSet<>(java.util.List.of("all")))
+                .timeStart(now.minusDays(1))
+                .timeEnd(now.plusDays(1))
+                .status(CampaignStatus.ACTIVE)
+                .totalBudget(100_000L)
+                .bidPrice(50L)
+                .targetClicks(100L)
+                .build());
+        Long id = campaign.getCampaignId();
+
+        assertThat(campaignRepository.findActiveForTarget("20s", "all", now))
+                .extracting(Campaign::getCampaignId).contains(id);
+
+        mockMvc.perform(actionRequest("pause", id, USER_ID)).andExpect(status().isNoContent());
+        assertThat(campaignRepository.findActiveForTarget("20s", "all", now))
+                .extracting(Campaign::getCampaignId).doesNotContain(id);
+
+        mockMvc.perform(actionRequest("resume", id, USER_ID)).andExpect(status().isNoContent());
+        assertThat(campaignRepository.findActiveForTarget("20s", "all", now))
+                .extracting(Campaign::getCampaignId).contains(id);
+    }
+
+    private MockHttpServletRequestBuilder actionRequest(String action, Long campaignId, Long userId) {
+        return post("/api/v1/campaigns/" + campaignId + "/" + action).header(HttpHeaders.AUTHORIZATION, bearer(userId));
     }
 
     private MockHttpServletRequestBuilder listRequest(Long userId) {
