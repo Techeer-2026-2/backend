@@ -34,13 +34,28 @@ class ClaudeMessageClientTest {
                 .andExpect(header("x-api-key", "test-key"))
                 .andExpect(header("anthropic-version", "2023-06-01"))
                 .andExpect(jsonPath("$.model").value("claude-sonnet-5-5"))
-                .andExpect(jsonPath("$.max_tokens").value(400))
+                .andExpect(jsonPath("$.max_tokens").value(2048))
                 .andRespond(withSuccess("""
                         {"content":[{"type":"text","text":"  요약 문장입니다.  "}],"stop_reason":"end_turn"}
                         """, MediaType.APPLICATION_JSON));
 
         assertThat(client.complete("질문")).isEqualTo("요약 문장입니다.");
         server.verify();
+    }
+
+    @Test
+    @DisplayName("생각(thinking) 블록이 먼저 와도 text 블록의 답을 돌려준다")
+    void readsTextBlockAfterThinkingBlock() {
+        RestClient.Builder builder = RestClient.builder().baseUrl(BASE);
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        ClaudeMessageClient client = new ClaudeMessageClient(builder.build(), "test-key", "claude-sonnet-5-5");
+
+        server.expect(requestTo(BASE + "/v1/messages"))
+                .andRespond(withSuccess("""
+                        {"content":[{"type":"thinking","thinking":"생각 중"},{"type":"text","text":"답입니다."}]}
+                        """, MediaType.APPLICATION_JSON));
+
+        assertThat(client.complete("질문")).isEqualTo("답입니다.");
     }
 
     @Test

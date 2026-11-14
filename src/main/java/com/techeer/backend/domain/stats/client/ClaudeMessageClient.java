@@ -19,7 +19,7 @@ import org.springframework.web.client.RestClientException;
 public class ClaudeMessageClient {
 
     private static final String ANTHROPIC_VERSION = "2023-06-01";
-    private static final int MAX_TOKENS = 400;
+    private static final int MAX_TOKENS = 2048;
 
     private final RestClient claudeRestClient;
     private final String apiKey;
@@ -59,13 +59,19 @@ public class ClaudeMessageClient {
                     .body(body)
                     .retrieve()
                     .body(MessageResponse.class);
-            if (response == null || response.content() == null || response.content().isEmpty()
-                    || response.content().get(0).text() == null) {
+            // 모델은 생각(thinking) 블록을 먼저 보낼 수 있다. 실제 답은 type 이 text 인 블록에 있다.
+            String text = response == null || response.content() == null ? null
+                    : response.content().stream()
+                            .filter(block -> "text".equals(block.type()) && block.text() != null)
+                            .map(ContentBlock::text)
+                            .findFirst()
+                            .orElse(null);
+            if (text == null) {
                 throw new BusinessException(ErrorCode.AI_CALL_FAILED);
             }
-            return response.content().get(0).text().trim();
+            return text.trim();
         } catch (RestClientException e) {
-            throw new BusinessException(ErrorCode.AI_CALL_FAILED);
+            throw new BusinessException(ErrorCode.AI_CALL_FAILED, e);
         }
     }
 
