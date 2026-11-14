@@ -63,8 +63,9 @@ public class CampaignAgeStatsService {
             result.add(CampaignAgeStats.of(age, impressions.getOrDefault(age, 0L), clicks.getOrDefault(age, 0L)));
         }
         long unknownImpressions = impressions.getOrDefault(UNKNOWN, 0L);
-        if (unknownImpressions > 0) {
-            result.add(CampaignAgeStats.of(UNKNOWN, unknownImpressions, clicks.getOrDefault(UNKNOWN, 0L)));
+        long unknownClicks = clicks.getOrDefault(UNKNOWN, 0L);
+        if (unknownImpressions > 0 || unknownClicks > 0) {
+            result.add(CampaignAgeStats.of(UNKNOWN, unknownImpressions, unknownClicks));
         }
         return result;
     }
