@@ -24,6 +24,7 @@ public enum ErrorCode {
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "요청 값이 올바르지 않습니다."),
 
     // 캠페인
+    CAMPAIGN_BID_EXCEEDS_BUDGET(HttpStatus.BAD_REQUEST, "입찰가는 총 예산보다 클 수 없습니다."),
     INVALID_CAMPAIGN_PERIOD(HttpStatus.BAD_REQUEST, "노출 종료 시각은 시작 시각보다 뒤여야 합니다."),
     CAMPAIGN_PERIOD_ALREADY_ENDED(HttpStatus.BAD_REQUEST, "노출 종료 시각은 현재 시각보다 뒤여야 합니다."),
     CAMPAIGN_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 캠페인입니다."),
@@ -68,6 +69,8 @@ public enum ErrorCode {
 
     // 외부 API (카카오·TMAP·iTunes 등)
     EXTERNAL_API_ERROR(HttpStatus.BAD_GATEWAY, "외부 API 호출에 실패했습니다."),
+    AI_CALL_FAILED(HttpStatus.BAD_GATEWAY, "AI 요약 호출에 실패했습니다."),
+    AI_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "AI 요약 키가 설정되지 않았습니다."),
 
     // 음악 앱 통근 세션
     COMMUTE_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않거나 진행 중인 통근이 없습니다."),

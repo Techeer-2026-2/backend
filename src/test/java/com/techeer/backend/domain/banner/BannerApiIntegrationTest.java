@@ -19,7 +19,16 @@ import com.techeer.backend.domain.stats.entity.CampaignStats;
 import com.techeer.backend.domain.stats.repository.CampaignStatsRepository;
 import com.techeer.backend.domain.targetuser.entity.TargetUser;
 import com.techeer.backend.domain.targetuser.repository.TargetUserRepository;
+import com.techeer.backend.domain.banner.service.BannerService;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -61,6 +70,12 @@ class BannerApiIntegrationTest {
 
     @Autowired
     private ClickEventRepository clickEventRepository;
+
+    @Autowired
+    private BannerService bannerService;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @AfterEach
     void tearDown() {
@@ -197,6 +212,88 @@ class BannerApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("노출마다 경쟁 입찰가로 차감액을 정해 기록하고 예산에서 뺀다")
+    void chargesBySecondBidAndDeductsBudget() throws Exception {
+        TargetUser user = saveUser(AGE_20S);
+        Campaign high = saveBidCampaign(AGE_20S, 100_000, 50);
+        Campaign low = saveBidCampaign(AGE_20S, 100_000, 30);
+
+        for (int i = 0; i < 40; i++) {
+            mockMvc.perform(matchRequest(user.getTargetUserId())).andExpect(status().isOk());
+        }
+
+        List<AdImpression> impressions = adImpressionRepository.findAll();
+        assertThat(impressions).hasSize(40);
+        long highSpent = 0;
+        long lowSpent = 0;
+        for (AdImpression impression : impressions) {
+            if (impression.getCampaignId().equals(high.getCampaignId())) {
+                assertThat(impression.getChargedAmount()).isEqualTo(31);
+                highSpent += 31;
+            } else {
+                assertThat(impression.getChargedAmount()).isEqualTo(30);
+                lowSpent += 30;
+            }
+        }
+        assertThat(campaignRepository.findById(high.getCampaignId()).orElseThrow().getSpentTotal()).isEqualTo(highSpent);
+        assertThat(campaignRepository.findById(low.getCampaignId()).orElseThrow().getSpentTotal()).isEqualTo(lowSpent);
+    }
+
+    @Test
+    @DisplayName("예산이 이번 차감액보다 적게 남은 캠페인은 노출하지 않는다")
+    void skipsCampaignWithoutEnoughBudget() throws Exception {
+        TargetUser user = saveUser(AGE_20S);
+        Campaign exhausted = saveBidCampaign(AGE_20S, 100, 50);
+        jdbcTemplate.update("UPDATE campaigns SET spent_total = 60 WHERE campaign_id = ?", exhausted.getCampaignId());
+
+        // 남은 예산 40 < 차감액 50 이라 후보에서 빠지고, 다른 후보가 없으니 204
+        mockMvc.perform(matchRequest(user.getTargetUserId())).andExpect(status().isNoContent());
+
+        // 입찰가가 더 높은 경쟁자가 있어도 exhausted 의 차감액은 자기 입찰가(50)라 여전히 노출할 수 없다
+        Campaign other = saveBidCampaign(AGE_20S, 100_000, 60);
+        mockMvc.perform(matchRequest(user.getTargetUserId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.campaignId").value(other.getCampaignId()));
+        assertThat(campaignRepository.findById(exhausted.getCampaignId()).orElseThrow().getSpentTotal()).isEqualTo(60);
+    }
+
+    @Test
+    @DisplayName("동시에 매칭 요청이 와도 예산을 넘겨 차감하지 않는다")
+    void doesNotOverspendUnderConcurrency() throws Exception {
+        TargetUser user = saveUser(AGE_20S);
+        Campaign campaign = saveBidCampaign(AGE_20S, 500, 50); // 정확히 10번 노출할 예산
+
+        int requests = 30;
+        ExecutorService pool = Executors.newFixedThreadPool(10);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Boolean>> results = new ArrayList<>();
+        for (int i = 0; i < requests; i++) {
+            results.add(pool.submit(() -> {
+                start.await();
+                return bannerService.matchBanner(user.getTargetUserId()).isPresent();
+            }));
+        }
+        long shown = 0;
+        try {
+            start.countDown();
+            for (Future<Boolean> result : results) {
+                if (result.get(30, TimeUnit.SECONDS)) {
+                    shown++;
+                }
+            }
+        } finally {
+            // 실패해도 남은 작업을 취소하고 종료를 기다린 뒤에 DB 정리가 실행되도록 한다.
+            results.forEach(future -> future.cancel(true));
+            pool.shutdownNow();
+            pool.awaitTermination(30, TimeUnit.SECONDS);
+        }
+
+        assertThat(shown).isEqualTo(10);
+        assertThat(adImpressionRepository.count()).isEqualTo(10);
+        assertThat(campaignRepository.findById(campaign.getCampaignId()).orElseThrow().getSpentTotal()).isEqualTo(500);
+    }
+
+    @Test
     @DisplayName("연령대 목록 중 하나와 맞고 성별도 맞으면 노출한다")
     void matchesWhenAgeIsOneOfSeveralAndGenderMatches() throws Exception {
         TargetUser user = saveUser(AGE_30S, "F");
@@ -206,6 +303,20 @@ class BannerApiIntegrationTest {
         mockMvc.perform(matchRequest(user.getTargetUserId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.campaignId").value(campaign.getCampaignId()));
+    }
+
+    private Campaign saveBidCampaign(String ageGroup, long totalBudget, long bidPrice) {
+        return campaignRepository.save(Campaign.builder()
+                .userId(1L)
+                .title("입찰 " + bidPrice)
+                .body("본문")
+                .imageUrl("https://example.com/banner.png")
+                .ageGroups(Set.of(ageGroup)).genders(Set.of("all"))
+                .timeStart(daysFromNow(-1))
+                .timeEnd(daysFromNow(1))
+                .status(CampaignStatus.ACTIVE)
+                .totalBudget(totalBudget).bidPrice(bidPrice).targetClicks(100)
+                .build());
     }
 
     private TargetUser saveUser(String ageGroup, String gender) {
@@ -228,6 +339,7 @@ class BannerApiIntegrationTest {
                 .timeStart(timeStart)
                 .timeEnd(timeEnd)
                 .status(CampaignStatus.ACTIVE)
+                .totalBudget(100_000).bidPrice(50).targetClicks(300)
                 .build());
     }
 
@@ -250,6 +362,7 @@ class BannerApiIntegrationTest {
                 .timeStart(timeStart)
                 .timeEnd(timeEnd)
                 .status(status)
+                .totalBudget(100_000).bidPrice(50).targetClicks(300)
                 .build());
     }
 
