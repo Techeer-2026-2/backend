@@ -134,6 +134,44 @@ public class CampaignController {
     }
 
     @Operation(
+            summary = "캠페인 일시정지",
+            description = "진행중(ACTIVE) 캠페인을 일시정지한다. 일시정지 중에는 배너가 노출되지 않는다. 진행중이 아니면 409.",
+            security = @SecurityRequirement(name = SwaggerConfig.BEARER_AUTH))
+    @ApiResponse(responseCode = "204", description = "일시정지됨", content = @Content)
+    @ApiResponse(responseCode = "401", description = "토큰이 없거나(AUTH_REQUIRED) 올바르지 않음(INVALID_TOKEN)",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "내 캠페인이 아님",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "존재하지 않거나 삭제된 캠페인",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "409", description = "진행중이 아닌 캠페인(CAMPAIGN_STATUS_CONFLICT)",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @PostMapping("/campaigns/{campaignId}/pause")
+    public ResponseEntity<Void> pauseCampaign(@PathVariable Long campaignId, @AdvertiserId Long advertiserId) {
+        campaignService.pauseCampaign(advertiserId, campaignId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(
+            summary = "캠페인 재개",
+            description = "일시정지한(PAUSED) 캠페인을 다시 진행한다. 일시정지 상태가 아니면 409.",
+            security = @SecurityRequirement(name = SwaggerConfig.BEARER_AUTH))
+    @ApiResponse(responseCode = "204", description = "재개됨", content = @Content)
+    @ApiResponse(responseCode = "401", description = "토큰이 없거나(AUTH_REQUIRED) 올바르지 않음(INVALID_TOKEN)",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "내 캠페인이 아님",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "존재하지 않거나 삭제된 캠페인",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "409", description = "일시정지 상태가 아닌 캠페인(CAMPAIGN_STATUS_CONFLICT)",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @PostMapping("/campaigns/{campaignId}/resume")
+    public ResponseEntity<Void> resumeCampaign(@PathVariable Long campaignId, @AdvertiserId Long advertiserId) {
+        campaignService.resumeCampaign(advertiserId, campaignId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(
             summary = "캠페인 삭제",
             description = "캠페인을 삭제한다. 노출·클릭 기록은 남지만 배너 노출과 목록에서는 빠진다.",
             security = @SecurityRequirement(name = SwaggerConfig.BEARER_AUTH))
@@ -144,18 +182,6 @@ public class CampaignController {
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "404", description = "존재하지 않거나 이미 삭제된 캠페인",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @PostMapping("/campaigns/{campaignId}/pause")
-    public ResponseEntity<Void> pauseCampaign(@PathVariable Long campaignId, @AdvertiserId Long advertiserId) {
-        campaignService.pauseCampaign(advertiserId, campaignId);
-        return ResponseEntity.noContent().build();
-    }
-
-    @PostMapping("/campaigns/{campaignId}/resume")
-    public ResponseEntity<Void> resumeCampaign(@PathVariable Long campaignId, @AdvertiserId Long advertiserId) {
-        campaignService.resumeCampaign(advertiserId, campaignId);
-        return ResponseEntity.noContent().build();
-    }
-
     @DeleteMapping("/campaigns/{campaignId}")
     public ResponseEntity<Void> deleteCampaign(
             @PathVariable Long campaignId,

@@ -1,5 +1,6 @@
 package com.techeer.backend.domain.campaign.dto;
 
+import com.techeer.backend.domain.campaign.entity.CampaignStatus;
 import com.techeer.backend.domain.campaign.entity.Campaign;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
@@ -18,6 +19,7 @@ public record CampaignResponse(
         @Schema(description = "노출 시작 시각") LocalDateTime startAt,
         @Schema(description = "노출 종료 시각") LocalDateTime endAt,
         @Schema(description = "진행 상태 (PENDING: 대기, ONGOING: 진행중, ENDED: 종료)") CampaignProgress status,
+        @Schema(description = "저장된 운영 상태 (ACTIVE: 노출 가능, PAUSED: 일시정지, ENDED: 종료)") CampaignStatus savedStatus,
         @Schema(description = "등록 시각") LocalDateTime createdAt,
         @Schema(description = "노출수 (목록 표용)", example = "1200") long impressionCount,
         @Schema(description = "클릭수 (목록 표용)", example = "300") long clickCount,
@@ -43,6 +45,7 @@ public record CampaignResponse(
                 campaign.getTimeStart(),
                 campaign.getTimeEnd(),
                 CampaignProgress.of(campaign.getTimeStart(), campaign.getTimeEnd(), now),
+                campaign.getStatus(),
                 campaign.getCreatedAt(),
                 impressionCount,
                 clickCount,
