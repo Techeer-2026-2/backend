@@ -178,6 +178,41 @@ public class CampaignService {
     }
 
     /**
+     * 진행중(ACTIVE) 캠페인을 일시정지한다. 일시정지 중에는 배너 매칭에서 빠진다.
+     *
+     * @throws BusinessException 캠페인이 없거나 삭제된 경우, 내 캠페인이 아닌 경우, ACTIVE 가 아닌 경우
+     */
+    @Transactional
+    public void pauseCampaign(Long userId, Long campaignId) {
+        changeDelivery(userId, campaignId, true);
+    }
+
+    /**
+     * 일시정지한(PAUSED) 캠페인을 다시 진행한다.
+     *
+     * @throws BusinessException 캠페인이 없거나 삭제된 경우, 내 캠페인이 아닌 경우, PAUSED 가 아닌 경우
+     */
+    @Transactional
+    public void resumeCampaign(Long userId, Long campaignId) {
+        changeDelivery(userId, campaignId, false);
+    }
+
+    private void changeDelivery(Long userId, Long campaignId, boolean pause) {
+        // 삭제·수정과 같은 잠금을 걸어 동시 요청끼리 상태가 꼬이지 않게 한다.
+        Campaign campaign = checkOwner(userId,
+                campaignRepository.findWithLockByCampaignIdAndDeletedAtIsNull(campaignId));
+        CampaignStatus expected = pause ? CampaignStatus.ACTIVE : CampaignStatus.PAUSED;
+        if (campaign.getStatus() != expected) {
+            throw new BusinessException(ErrorCode.CAMPAIGN_STATUS_CONFLICT);
+        }
+        if (pause) {
+            campaign.pause();
+        } else {
+            campaign.resume();
+        }
+    }
+
+    /**
      * 배너 이미지를 저장소에 올린다. 이번 트랜잭션이 롤백되면 캠페인에 연결되지 못한 이미지이므로 지운다.
      */
     private String uploadBanner(MultipartFile image) {

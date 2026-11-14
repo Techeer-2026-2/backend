@@ -117,6 +117,16 @@ public class Campaign extends BaseEntity {
      * 예산·입찰가·목표 클릭수를 바꾼다. null 인 값은 그대로 둔다.
      * 진행중·종료 캠페인에서 호출되지 않도록 막는 것은 서비스의 몫이다.
      */
+    /** 진행중 캠페인을 일시정지한다. 배너 매칭은 ACTIVE 만 대상이므로 이후 노출되지 않는다. */
+    public void pause() {
+        this.status = CampaignStatus.PAUSED;
+    }
+
+    /** 일시정지한 캠페인을 다시 ACTIVE 로 돌린다. */
+    public void resume() {
+        this.status = CampaignStatus.ACTIVE;
+    }
+
     public void updateBilling(Long totalBudget, Long bidPrice, Long targetClicks) {
         if (totalBudget != null) {
             this.totalBudget = totalBudget;

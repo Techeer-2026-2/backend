@@ -144,6 +144,18 @@ public class CampaignController {
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "404", description = "존재하지 않거나 이미 삭제된 캠페인",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @PostMapping("/campaigns/{campaignId}/pause")
+    public ResponseEntity<Void> pauseCampaign(@PathVariable Long campaignId, @AdvertiserId Long advertiserId) {
+        campaignService.pauseCampaign(advertiserId, campaignId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/campaigns/{campaignId}/resume")
+    public ResponseEntity<Void> resumeCampaign(@PathVariable Long campaignId, @AdvertiserId Long advertiserId) {
+        campaignService.resumeCampaign(advertiserId, campaignId);
+        return ResponseEntity.noContent().build();
+    }
+
     @DeleteMapping("/campaigns/{campaignId}")
     public ResponseEntity<Void> deleteCampaign(
             @PathVariable Long campaignId,
