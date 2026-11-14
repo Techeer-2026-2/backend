@@ -52,6 +52,7 @@ public class CampaignService {
     public CampaignResponse createCampaign(Long userId, CampaignCreateRequest request, MultipartFile image) {
         LocalDateTime now = LocalDateTime.now(clock);
         validatePeriod(request.startAt(), request.endAt(), now);
+        validateBid(request.bidPrice(), request.totalBudget());
         CampaignTargetRules.validate(request.targetAgeGroups(), request.targetGenders());
         String imageUrl = uploadBanner(image);
 
@@ -66,6 +67,9 @@ public class CampaignService {
                 .timeStart(request.startAt())
                 .timeEnd(request.endAt())
                 .status(CampaignStatus.ACTIVE)
+                .totalBudget(request.totalBudget())
+                .bidPrice(request.bidPrice())
+                .targetClicks(request.targetClicks())
                 .build());
         return CampaignResponse.of(campaign, now);
     }
@@ -111,6 +115,7 @@ public class CampaignService {
 
     /**
      * 요청에 담긴 필드만 수정한다. 대기 상태는 전체, 진행중은 문구와 배너 이미지만 수정할 수 있고 종료 후에는 수정할 수 없다.
+     * 예산·입찰가·목표 클릭수도 대기 상태에서만 바꿀 수 있다.
      * 이미지를 바꾸면 수정이 반영된 뒤 이전 이미지를 저장소에서 지운다.
      *
      * @param image 새 배너 이미지. null 이거나 빈 파일이면 이미지를 바꾸지 않는다
@@ -149,7 +154,10 @@ public class CampaignService {
         campaign.updateContent(request.title(), request.body(), newImageUrl);
         campaign.updateDelivery(request.linkUrl(), toSet(request.targetAgeGroups()), toSet(request.targetGenders()),
                 request.startAt(), request.endAt());
+        campaign.updateBilling(request.totalBudget(), request.bidPrice(), request.targetClicks());
         validatePeriod(campaign.getTimeStart(), campaign.getTimeEnd(), now);
+        // 한쪽만 바꿔도 반대쪽 기존 값과 어긋날 수 있어서, 반영된 결과로 검사한다.
+        validateBid(campaign.getBidPrice(), campaign.getTotalBudget());
 
         // 응답의 updatedAt 에 이번 수정 시각이 담기도록 바로 반영한다.
         campaignRepository.flush();
@@ -227,6 +235,15 @@ public class CampaignService {
         }
         if (!timeEnd.isAfter(now)) {
             throw new BusinessException(ErrorCode.CAMPAIGN_PERIOD_ALREADY_ENDED);
+        }
+    }
+
+    /**
+     * 입찰가가 총 예산보다 크면 노출이 한 번도 일어날 수 없으므로 막는다.
+     */
+    private void validateBid(long bidPrice, long totalBudget) {
+        if (bidPrice > totalBudget) {
+            throw new BusinessException(ErrorCode.CAMPAIGN_BID_EXCEEDS_BUDGET);
         }
     }
 
