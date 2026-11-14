@@ -5,6 +5,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.techeer.backend.TestcontainersConfiguration;
+import com.techeer.backend.domain.advertiser.entity.Advertiser;
+import com.techeer.backend.domain.advertiser.repository.AdvertiserRepository;
 import com.techeer.backend.domain.auth.jwt.JwtTokenProvider;
 import com.techeer.backend.domain.campaign.entity.Campaign;
 import com.techeer.backend.domain.campaign.entity.CampaignStatus;
@@ -34,8 +36,8 @@ import org.springframework.test.web.servlet.MockMvc;
 @Import(TestcontainersConfiguration.class)
 class CampaignTimeseriesApiIntegrationTest {
 
-    private static final Long USER_ID = 1L;
-    private static final Long OTHER_USER_ID = 2L;
+    private Long USER_ID;
+    private Long OTHER_USER_ID;
     private static final String BASE = "/api/v1/campaigns/";
 
     @Autowired
@@ -45,6 +47,9 @@ class CampaignTimeseriesApiIntegrationTest {
     private CampaignRepository campaignRepository;
 
     @Autowired
+    private AdvertiserRepository advertiserRepository;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
@@ -52,12 +57,15 @@ class CampaignTimeseriesApiIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        USER_ID = advertiserRepository.save(Advertiser.create("owner@test.com", "hash", "테커 카페")).getUserId();
+        OTHER_USER_ID = advertiserRepository.save(Advertiser.create("other@test.com", "hash", "다른 가게")).getUserId();
         jdbcTemplate.update("DELETE FROM click_events");
         jdbcTemplate.update("DELETE FROM ad_impressions");
     }
 
     @AfterEach
     void tearDown() {
+        advertiserRepository.deleteAll();
         jdbcTemplate.update("DELETE FROM click_events");
         jdbcTemplate.update("DELETE FROM ad_impressions");
         campaignRepository.deleteAll();
@@ -86,34 +94,6 @@ class CampaignTimeseriesApiIntegrationTest {
                 .andExpect(jsonPath("$[1].ctr").value(0.0))
                 .andExpect(jsonPath("$[2].bucketStart").value("2026-11-12T00:00:00"))
                 .andExpect(jsonPath("$[2].impressionCount").value(0));
-    }
-
-    @Test
-    @DisplayName("구간별 소진액은 노출 차감액의 합이고 CPC·CPM 을 계산하며, 0 으로 나누는 구간은 0 이다")
-    void spendCpcCpm() throws Exception {
-        Campaign campaign = saveCampaign();
-        saveImpression(campaign, LocalDateTime.of(2026, 11, 10, 9, 0), 31);
-        saveImpression(campaign, LocalDateTime.of(2026, 11, 10, 18, 0), 31);
-        saveImpression(campaign, LocalDateTime.of(2026, 11, 10, 20, 0), 50);
-        saveClick(campaign, LocalDateTime.of(2026, 11, 10, 9, 5));
-        saveClick(campaign, LocalDateTime.of(2026, 11, 10, 18, 5));
-        saveImpression(campaign, LocalDateTime.of(2026, 11, 11, 10, 0), 30);
-
-        mockMvc.perform(get(url(campaign) + "?from=2026-11-10T00:00:00&to=2026-11-13T00:00:00&granularity=day")
-                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
-                .andExpect(status().isOk())
-                // 11/10: 노출 3, 클릭 2, 소진 112 → CPC 56, CPM 37333.33
-                .andExpect(jsonPath("$[0].spentAmount").value(112))
-                .andExpect(jsonPath("$[0].cpc").value(56.0))
-                .andExpect(jsonPath("$[0].cpm").value(37333.33))
-                // 11/11: 클릭 0 → CPC 0
-                .andExpect(jsonPath("$[1].spentAmount").value(30))
-                .andExpect(jsonPath("$[1].cpc").value(0.0))
-                .andExpect(jsonPath("$[1].cpm").value(30000.0))
-                // 11/12: 노출 0 → 전부 0
-                .andExpect(jsonPath("$[2].spentAmount").value(0))
-                .andExpect(jsonPath("$[2].cpc").value(0.0))
-                .andExpect(jsonPath("$[2].cpm").value(0.0));
     }
 
     @Test
@@ -220,11 +200,32 @@ class CampaignTimeseriesApiIntegrationTest {
                 .build());
     }
 
-    private void saveImpression(Campaign campaign, LocalDateTime shownAt) {
-        jdbcTemplate.update(
-                "INSERT INTO ad_impressions (notification_id, campaign_id, target_user_id, shown_at, created_at, updated_at)"
-                        + " VALUES (?, ?, ?, ?, ?, ?)",
-                UUID.randomUUID().toString(), campaign.getCampaignId(), 1L, shownAt, shownAt, shownAt);
+    @Test
+    @DisplayName("구간별 소진액은 노출 차감액의 합이고 CPC·CPM 을 계산하며, 0 으로 나누는 구간은 0 이다")
+    void spendCpcCpm() throws Exception {
+        Campaign campaign = saveCampaign();
+        saveImpression(campaign, LocalDateTime.of(2026, 11, 10, 9, 0), 31);
+        saveImpression(campaign, LocalDateTime.of(2026, 11, 10, 18, 0), 31);
+        saveImpression(campaign, LocalDateTime.of(2026, 11, 10, 20, 0), 50);
+        saveClick(campaign, LocalDateTime.of(2026, 11, 10, 9, 5));
+        saveClick(campaign, LocalDateTime.of(2026, 11, 10, 18, 5));
+        saveImpression(campaign, LocalDateTime.of(2026, 11, 11, 10, 0), 30);
+
+        mockMvc.perform(get(url(campaign) + "?from=2026-11-10T00:00:00&to=2026-11-13T00:00:00&granularity=day")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
+                .andExpect(status().isOk())
+                // 11/10: 노출 3, 클릭 2, 소진 112 → CPC 56, CPM 37333.33
+                .andExpect(jsonPath("$[0].spentAmount").value(112))
+                .andExpect(jsonPath("$[0].cpc").value(56.0))
+                .andExpect(jsonPath("$[0].cpm").value(37333.33))
+                // 11/11: 클릭 0 → CPC 0
+                .andExpect(jsonPath("$[1].spentAmount").value(30))
+                .andExpect(jsonPath("$[1].cpc").value(0.0))
+                .andExpect(jsonPath("$[1].cpm").value(30000.0))
+                // 11/12: 노출 0 → 전부 0
+                .andExpect(jsonPath("$[2].spentAmount").value(0))
+                .andExpect(jsonPath("$[2].cpc").value(0.0))
+                .andExpect(jsonPath("$[2].cpm").value(0.0));
     }
 
     private void saveImpression(Campaign campaign, LocalDateTime shownAt, long chargedAmount) {
@@ -233,6 +234,13 @@ class CampaignTimeseriesApiIntegrationTest {
                         + " created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 UUID.randomUUID().toString(), campaign.getCampaignId(), 1L, shownAt, chargedAmount,
                 shownAt, shownAt);
+    }
+
+    private void saveImpression(Campaign campaign, LocalDateTime shownAt) {
+        jdbcTemplate.update(
+                "INSERT INTO ad_impressions (notification_id, campaign_id, target_user_id, shown_at, created_at, updated_at)"
+                        + " VALUES (?, ?, ?, ?, ?, ?)",
+                UUID.randomUUID().toString(), campaign.getCampaignId(), 1L, shownAt, shownAt, shownAt);
     }
 
     private void saveClick(Campaign campaign, LocalDateTime clickedAt) {

@@ -273,14 +273,20 @@ class BannerApiIntegrationTest {
                 return bannerService.matchBanner(user.getTargetUserId()).isPresent();
             }));
         }
-        start.countDown();
         long shown = 0;
-        for (Future<Boolean> result : results) {
-            if (result.get(30, TimeUnit.SECONDS)) {
-                shown++;
+        try {
+            start.countDown();
+            for (Future<Boolean> result : results) {
+                if (result.get(30, TimeUnit.SECONDS)) {
+                    shown++;
+                }
             }
+        } finally {
+            // 실패해도 남은 작업을 취소하고 종료를 기다린 뒤에 DB 정리가 실행되도록 한다.
+            results.forEach(future -> future.cancel(true));
+            pool.shutdownNow();
+            pool.awaitTermination(30, TimeUnit.SECONDS);
         }
-        pool.shutdown();
 
         assertThat(shown).isEqualTo(10);
         assertThat(adImpressionRepository.count()).isEqualTo(10);
