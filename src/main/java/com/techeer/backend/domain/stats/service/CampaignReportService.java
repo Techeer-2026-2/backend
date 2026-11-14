@@ -15,7 +15,7 @@ public class CampaignReportService {
 
     /** 엑셀이 UTF-8 을 올바르게 읽도록 붙이는 BOM */
     private static final String BOM = "﻿";
-    private static final String HEADER = "날짜,노출 수,클릭 수,CTR(%)";
+    private static final String HEADER = "날짜,노출 수,클릭 수,CTR(%),집행액(원),CPC(원),CPM(원)";
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     private final CampaignTimeseriesService campaignTimeseriesService;
@@ -36,7 +36,10 @@ public class CampaignReportService {
             csv.append(bucket.bucketStart().format(DATE)).append(',')
                     .append(bucket.impressionCount()).append(',')
                     .append(bucket.clickCount()).append(',')
-                    .append(bucket.ctr()).append("\r\n");
+                    .append(bucket.ctr()).append(',')
+                    .append(bucket.spentAmount()).append(',')
+                    .append(bucket.cpc()).append(',')
+                    .append(bucket.cpm()).append("\r\n");
         }
         return csv.toString().getBytes(StandardCharsets.UTF_8);
     }

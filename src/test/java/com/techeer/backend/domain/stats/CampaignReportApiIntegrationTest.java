@@ -96,9 +96,9 @@ class CampaignReportApiIntegrationTest {
                 .andReturn();
 
         String body = new String(result.getResponse().getContentAsByteArray(), StandardCharsets.UTF_8);
-        assertThat(body).startsWith("﻿날짜,노출 수,클릭 수,CTR(%)\r\n");
-        assertThat(body).contains("2026-11-10,3,1,33.33\r\n");
-        assertThat(body).contains("2026-11-11,0,0,0.0\r\n");
+        assertThat(body).startsWith("﻿날짜,노출 수,클릭 수,CTR(%),집행액(원),CPC(원),CPM(원)\r\n");
+        assertThat(body).contains("2026-11-10,3,1,33.33,0,0.0,0.0\r\n");
+        assertThat(body).contains("2026-11-11,0,0,0.0,0,0.0,0.0\r\n");
     }
 
     @Test
