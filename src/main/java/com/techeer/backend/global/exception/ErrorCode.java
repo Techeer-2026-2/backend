@@ -25,6 +25,7 @@ public enum ErrorCode {
 
     // 캠페인
     CAMPAIGN_BID_EXCEEDS_BUDGET(HttpStatus.BAD_REQUEST, "입찰가는 총 예산보다 클 수 없습니다."),
+    CAMPAIGN_START_TOO_SOON(HttpStatus.BAD_REQUEST, "캠페인 시작 시각은 현재 시각 1시간 뒤 이후여야 합니다."),
     INVALID_CAMPAIGN_PERIOD(HttpStatus.BAD_REQUEST, "노출 종료 시각은 시작 시각보다 뒤여야 합니다."),
     CAMPAIGN_PERIOD_ALREADY_ENDED(HttpStatus.BAD_REQUEST, "노출 종료 시각은 현재 시각보다 뒤여야 합니다."),
     CAMPAIGN_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 캠페인입니다."),
