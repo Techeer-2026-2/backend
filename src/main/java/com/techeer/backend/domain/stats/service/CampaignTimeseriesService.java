@@ -1,5 +1,6 @@
 package com.techeer.backend.domain.stats.service;
 
+import com.techeer.backend.domain.advertiser.repository.AdvertiserRepository;
 import com.techeer.backend.domain.campaign.entity.Campaign;
 import com.techeer.backend.domain.campaign.repository.CampaignRepository;
 import com.techeer.backend.domain.click.repository.ClickEventRepository;
@@ -30,15 +31,18 @@ public class CampaignTimeseriesService {
     /** 한 번에 만들 구간 수 상한 (시간 단위 31일 = 744, 일 단위 1년 = 366) */
     private static final int MAX_BUCKETS = 800;
 
+    private final AdvertiserRepository advertiserRepository;
     private final CampaignRepository campaignRepository;
     private final AdImpressionRepository adImpressionRepository;
     private final ClickEventRepository clickEventRepository;
     private final Clock clock;
 
-    public CampaignTimeseriesService(CampaignRepository campaignRepository,
+    public CampaignTimeseriesService(AdvertiserRepository advertiserRepository,
+            CampaignRepository campaignRepository,
             AdImpressionRepository adImpressionRepository,
             ClickEventRepository clickEventRepository,
             Clock clock) {
+        this.advertiserRepository = advertiserRepository;
         this.campaignRepository = campaignRepository;
         this.adImpressionRepository = adImpressionRepository;
         this.clickEventRepository = clickEventRepository;
@@ -65,7 +69,8 @@ public class CampaignTimeseriesService {
         ChronoUnit step = "hour".equals(unit) ? ChronoUnit.HOURS : ChronoUnit.DAYS;
 
         LocalDateTime firstBucket = start.truncatedTo(step);
-        long bucketCount = step.between(firstBucket, end) + 1;
+        // 종료 시각이 정각이면 그 시각의 버킷은 포함하지 않으므로 1나노초 앞에서 센다.
+        long bucketCount = step.between(firstBucket, end.minusNanos(1)) + 1;
         if (bucketCount > MAX_BUCKETS) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
@@ -84,6 +89,9 @@ public class CampaignTimeseriesService {
     }
 
     private void findOwnedCampaign(Long advertiserId, Long campaignId) {
+        if (!advertiserRepository.existsByUserIdAndDeletedAtIsNull(advertiserId)) {
+            throw new BusinessException(ErrorCode.ADVERTISER_NOT_FOUND);
+        }
         Campaign campaign = campaignRepository.findByCampaignIdAndDeletedAtIsNull(campaignId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CAMPAIGN_NOT_FOUND));
         if (!campaign.getUserId().equals(advertiserId)) {
