@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -36,5 +37,18 @@ public record CampaignCreateRequest(
         LocalDateTime startAt,
         @Schema(description = "노출 종료 시각. 시작 시각보다 뒤여야 한다.", example = "2026-10-10T18:00:00")
         @NotNull
-        LocalDateTime endAt) {
+        LocalDateTime endAt,
+        @Schema(description = "총 예산(원). 누적 소진액이 이 금액에 닿으면 노출이 멈춘다.", example = "100000")
+        @NotNull
+        @Positive
+        Long totalBudget,
+        @Schema(description = "입찰가(원). 노출 1회당 최대로 낼 금액이며 총 예산보다 클 수 없다. "
+                + "실제 차감액은 경쟁 상황에 따라 이보다 작을 수 있다.", example = "50")
+        @NotNull
+        @Positive
+        Long bidPrice,
+        @Schema(description = "목표 클릭수", example = "300")
+        @NotNull
+        @Positive
+        Long targetClicks) {
 }

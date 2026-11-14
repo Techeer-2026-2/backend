@@ -68,7 +68,8 @@ class CampaignStatsStreamTimeoutIntegrationTest {
     @DisplayName("timeout 이 지나면 연결이 끝나고 구독이 정리되며, 다시 연결하면 현재 값을 바로 받는다")
     void closesOnTimeoutAndReconnectWorks() throws Exception {
         long campaignId = campaignRepository.save(Campaign.builder()
-                .userId(1L).title("제목").ageGroups(Set.of("20s")).genders(Set.of("all")).status(CampaignStatus.ACTIVE).build()).getCampaignId();
+                .userId(1L).title("제목").ageGroups(Set.of("20s")).genders(Set.of("all")).status(CampaignStatus.ACTIVE)
+                .totalBudget(100_000).bidPrice(50).targetClicks(300).build()).getCampaignId();
         awaitActive(0);
 
         int dataEvents = 0;

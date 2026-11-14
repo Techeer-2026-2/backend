@@ -97,10 +97,19 @@ class CampaignApiIntegrationTest {
                 .andExpect(jsonPath("$.title").value("OOO 컴백 D-3"))
                 .andExpect(jsonPath("$.imageUrl").value(UPLOADED_URL))
                 .andExpect(jsonPath("$.linkUrl").value("https://example.com/comeback"))
-                .andExpect(jsonPath("$.status").value("PENDING"));
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.totalBudget").value(100000))
+                .andExpect(jsonPath("$.bidPrice").value(50))
+                .andExpect(jsonPath("$.spentTotal").value(0))
+                .andExpect(jsonPath("$.remainingBudget").value(100000))
+                .andExpect(jsonPath("$.targetClicks").value(300));
 
         Campaign saved = campaignRepository.findAll().get(0);
         assertThat(saved.getUserId()).isEqualTo(USER_ID);
+        assertThat(saved.getTotalBudget()).isEqualTo(100_000);
+        assertThat(saved.getBidPrice()).isEqualTo(50);
+        assertThat(saved.getSpentTotal()).isZero();
+        assertThat(saved.getTargetClicks()).isEqualTo(300);
         assertThat(saved.getImageUrl()).isEqualTo(UPLOADED_URL);
         assertThat(saved.getAgeGroups()).containsExactly("20s");
         assertThat(saved.getTimeStart()).isEqualTo(startAt);
@@ -239,6 +248,55 @@ class CampaignApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("예산·입찰가·목표 클릭수가 없거나 1 보다 작으면 400 을 돌려준다")
+    void rejectsMissingOrNonPositiveBilling() throws Exception {
+        String base = campaignJson(daysFromNow(1), daysFromNow(3), "null");
+        String billing = "\"totalBudget\": 100000, \"bidPrice\": 50, \"targetClicks\": 300";
+        String[] invalid = {
+                base.replace(billing, "\"bidPrice\": 50, \"targetClicks\": 300"),
+                base.replace(billing, "\"totalBudget\": 100000, \"targetClicks\": 300"),
+                base.replace(billing, "\"totalBudget\": 100000, \"bidPrice\": 50"),
+                base.replace(billing, "\"totalBudget\": 0, \"bidPrice\": 50, \"targetClicks\": 300"),
+                base.replace(billing, "\"totalBudget\": 100000, \"bidPrice\": -1, \"targetClicks\": 300"),
+                base.replace(billing, "\"totalBudget\": 100000, \"bidPrice\": 50, \"targetClicks\": 0"),
+        };
+
+        for (String json : invalid) {
+            mockMvc.perform(createRequest(USER_ID, json))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+        }
+        assertThat(campaignRepository.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("입찰가가 총 예산보다 크면 400 을 돌려주고 이미지를 올리지 않는다")
+    void rejectsBidOverBudget() throws Exception {
+        String json = campaignJson(daysFromNow(1), daysFromNow(3), "null")
+                .replace("\"totalBudget\": 100000, \"bidPrice\": 50",
+                        "\"totalBudget\": 1000, \"bidPrice\": 1001");
+
+        mockMvc.perform(createRequest(USER_ID, json))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CAMPAIGN_BID_EXCEEDS_BUDGET"));
+
+        assertThat(campaignRepository.count()).isZero();
+        verify(imageStorage, never()).upload(anyString(), any(), any());
+    }
+
+    @Test
+    @DisplayName("입찰가가 총 예산과 같으면 등록할 수 있다")
+    void acceptsBidEqualToBudget() throws Exception {
+        String json = campaignJson(daysFromNow(1), daysFromNow(3), "null")
+                .replace("\"totalBudget\": 100000, \"bidPrice\": 50",
+                        "\"totalBudget\": 1000, \"bidPrice\": 1000");
+
+        mockMvc.perform(createRequest(USER_ID, json))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.bidPrice").value(1000));
+    }
+
+    @Test
     @DisplayName("토큰 없이 요청하면 401 을 돌려준다")
     void rejectsUnauthenticatedRequests() throws Exception {
         mockMvc.perform(multipart("/api/v1/campaigns")
@@ -268,7 +326,12 @@ class CampaignApiIntegrationTest {
                 .andExpect(jsonPath("$[?(@.title == '남의 캠페인')]").isEmpty())
                 .andExpect(jsonPath("$[?(@.title == '대기')].status").value("PENDING"))
                 .andExpect(jsonPath("$[?(@.title == '진행중')].status").value("ONGOING"))
-                .andExpect(jsonPath("$[?(@.title == '종료')].status").value("ENDED"));
+                .andExpect(jsonPath("$[?(@.title == '종료')].status").value("ENDED"))
+                .andExpect(jsonPath("$[0].totalBudget").value(100000))
+                .andExpect(jsonPath("$[0].bidPrice").value(50))
+                .andExpect(jsonPath("$[0].spentTotal").value(0))
+                .andExpect(jsonPath("$[0].remainingBudget").value(100000))
+                .andExpect(jsonPath("$[0].targetClicks").value(300));
     }
 
     @Test
@@ -330,6 +393,7 @@ class CampaignApiIntegrationTest {
                 .timeStart(timeStart)
                 .timeEnd(timeEnd)
                 .status(CampaignStatus.ACTIVE)
+                .totalBudget(100_000).bidPrice(50).targetClicks(300)
                 .build());
     }
 
@@ -347,7 +411,8 @@ class CampaignApiIntegrationTest {
                   "linkUrl": %s,
                   "targetAgeGroups": ["20s"], "targetGenders": ["all"],
                   "startAt": "%s",
-                  "endAt": "%s"
+                  "endAt": "%s",
+                  "totalBudget": 100000, "bidPrice": 50, "targetClicks": 300
                 }
                 """.formatted(linkUrlJson, startAt, endAt);
     }

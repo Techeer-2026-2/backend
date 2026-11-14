@@ -2,12 +2,13 @@ package com.techeer.backend.domain.campaign.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Schema(description = "캠페인 수정 요청. 바꿀 필드만 보낸다. 배너 이미지는 multipart 의 image 파트로 보낸다. "
-        + "진행중인 캠페인은 title, body 와 이미지만 바꿀 수 있다.")
+        + "진행중인 캠페인은 title, body 와 이미지만 바꿀 수 있다 (예산·입찰가·목표 클릭수는 대기 상태에서만).")
 public record CampaignUpdateRequest(
         @Schema(description = "배너 제목", example = "OOO 컴백 D-1")
         @Size(min = 1, max = 128)
@@ -30,7 +31,16 @@ public record CampaignUpdateRequest(
         @Schema(description = "노출 시작 시각", example = "2026-10-07T00:00:00")
         LocalDateTime startAt,
         @Schema(description = "노출 종료 시각. 시작 시각보다 뒤여야 한다.", example = "2026-10-10T18:00:00")
-        LocalDateTime endAt) {
+        LocalDateTime endAt,
+        @Schema(description = "총 예산(원). 대기 상태에서만 바꿀 수 있다.", example = "100000")
+        @Positive
+        Long totalBudget,
+        @Schema(description = "입찰가(원). 대기 상태에서만 바꿀 수 있고 총 예산보다 클 수 없다.", example = "50")
+        @Positive
+        Long bidPrice,
+        @Schema(description = "목표 클릭수. 대기 상태에서만 바꿀 수 있다.", example = "300")
+        @Positive
+        Long targetClicks) {
 
     // null 은 "바꾸지 않음" 이라 @NotBlank 대신 값이 있을 때만 공백 여부를 검사한다. 본문은 줄바꿈을 포함할 수 있다.
     // U 플래그: 전각 공백(U+3000) 등 유니코드 공백도 \S 가 아닌 공백으로 본다.
@@ -39,13 +49,14 @@ public record CampaignUpdateRequest(
 
     /** 이미지만 바꿀 때처럼 request 파트 없이 온 요청. 아무 필드도 바꾸지 않는다. */
     public static final CampaignUpdateRequest EMPTY =
-            new CampaignUpdateRequest(null, null, null, null, null, null, null);
+            new CampaignUpdateRequest(null, null, null, null, null, null, null, null, null, null);
 
     /**
-     * 진행중에는 바꿀 수 없는 필드(링크·타겟 조건·노출 기간)를 담고 있는지.
+     * 진행중에는 바꿀 수 없는 필드(링크·타겟 조건·노출 기간·예산·입찰가·목표 클릭수)를 담고 있는지.
      */
     public boolean changesDelivery() {
         return linkUrl != null || targetAgeGroups != null || targetGenders != null
-                || startAt != null || endAt != null;
+                || startAt != null || endAt != null
+                || totalBudget != null || bidPrice != null || targetClicks != null;
     }
 }

@@ -254,6 +254,7 @@ class CampaignHistoryApiIntegrationTest {
                 .timeStart(now.minusDays(10))
                 .timeEnd(timeEnd)
                 .status(status)
+                .totalBudget(100_000).bidPrice(50).targetClicks(300)
                 .build());
     }
 
