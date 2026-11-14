@@ -6,6 +6,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.techeer.backend.TestcontainersConfiguration;
+import com.techeer.backend.domain.advertiser.entity.Advertiser;
+import com.techeer.backend.domain.advertiser.repository.AdvertiserRepository;
 import com.techeer.backend.domain.auth.jwt.JwtTokenProvider;
 import com.techeer.backend.domain.campaign.entity.Campaign;
 import com.techeer.backend.domain.campaign.entity.CampaignStatus;
@@ -37,14 +39,17 @@ import org.springframework.test.web.servlet.MvcResult;
 @Import(TestcontainersConfiguration.class)
 class CampaignPdfApiIntegrationTest {
 
-    private static final Long USER_ID = 1L;
-    private static final Long OTHER_USER_ID = 2L;
+    private Long USER_ID;
+    private Long OTHER_USER_ID;
 
     @Autowired
     private MockMvc mockMvc;
 
     @Autowired
     private CampaignRepository campaignRepository;
+
+    @Autowired
+    private AdvertiserRepository advertiserRepository;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -54,12 +59,15 @@ class CampaignPdfApiIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        USER_ID = advertiserRepository.save(Advertiser.create("owner@test.com", "hash", "테커 카페")).getUserId();
+        OTHER_USER_ID = advertiserRepository.save(Advertiser.create("other@test.com", "hash", "다른 가게")).getUserId();
         jdbcTemplate.update("DELETE FROM click_events");
         jdbcTemplate.update("DELETE FROM ad_impressions");
     }
 
     @AfterEach
     void tearDown() {
+        advertiserRepository.deleteAll();
         jdbcTemplate.update("DELETE FROM click_events");
         jdbcTemplate.update("DELETE FROM ad_impressions");
         campaignRepository.deleteAll();
