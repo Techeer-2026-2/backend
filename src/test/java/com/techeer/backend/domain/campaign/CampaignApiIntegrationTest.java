@@ -27,6 +27,7 @@ import com.techeer.backend.global.storage.ImageType;
 import jakarta.servlet.ServletException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.AfterEach;
@@ -68,7 +69,7 @@ class CampaignApiIntegrationTest {
     private CampaignRepository campaignRepository;
 
     @Autowired
-    private java.time.Clock clock;
+    private Clock clock;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -219,11 +220,20 @@ class CampaignApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("시작 시각이 과거면 등록 즉시 진행중이 된다")
-    void startsImmediatelyWhenStartIsInPast() throws Exception {
-        mockMvc.perform(createRequest(USER_ID, campaignJson(daysFromNow(-1), daysFromNow(3), "null")))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.status").value("ONGOING"));
+    @DisplayName("시작 시각이 현재 1시간 안이면 400 을 돌려준다")
+    void rejectsStartWithinOneHour() throws Exception {
+        LocalDateTime tooSoon = LocalDateTime.now(clock).plusMinutes(30).truncatedTo(ChronoUnit.SECONDS);
+        mockMvc.perform(createRequest(USER_ID, campaignJson(tooSoon, daysFromNow(3), "null")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CAMPAIGN_START_TOO_SOON"));
+    }
+
+    @Test
+    @DisplayName("시작 시각이 현재 1시간 뒤 이후면 등록된다")
+    void acceptsStartAfterOneHour() throws Exception {
+        LocalDateTime ok = LocalDateTime.now(clock).plusHours(2).truncatedTo(ChronoUnit.SECONDS);
+        mockMvc.perform(createRequest(USER_ID, campaignJson(ok, daysFromNow(3), "null")))
+                .andExpect(status().isCreated());
     }
 
     @Test

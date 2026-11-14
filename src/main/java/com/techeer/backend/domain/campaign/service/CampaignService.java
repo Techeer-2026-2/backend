@@ -52,6 +52,7 @@ public class CampaignService {
     public CampaignResponse createCampaign(Long userId, CampaignCreateRequest request, MultipartFile image) {
         LocalDateTime now = LocalDateTime.now(clock);
         validatePeriod(request.startAt(), request.endAt(), now);
+        validateStartNotTooSoon(request.startAt(), now);
         validateBid(request.bidPrice(), request.totalBudget());
         CampaignTargetRules.validate(request.targetAgeGroups(), request.targetGenders());
         String imageUrl = uploadBanner(image);
@@ -261,6 +262,17 @@ public class CampaignService {
      * 시작·종료 시각이 비어 있으면(기간 제한 없는 기존 캠페인) 해당 검사는 건너뛴다.
      * 시작 시각은 과거여도 된다 (등록·수정 즉시 노출 시작).
      */
+    /**
+     * 등록 시 시작 시각은 현재 시각 1시간 뒤 이후여야 한다. 프론트 입력 제한은 우회할 수 있어서 서버에서도 검사한다.
+     *
+     * @throws BusinessException 시작 시각이 현재 시각 + 1시간보다 이른 경우
+     */
+    private void validateStartNotTooSoon(LocalDateTime startAt, LocalDateTime now) {
+        if (startAt != null && startAt.isBefore(now.plusHours(1))) {
+            throw new BusinessException(ErrorCode.CAMPAIGN_START_TOO_SOON);
+        }
+    }
+
     private void validatePeriod(LocalDateTime timeStart, LocalDateTime timeEnd, LocalDateTime now) {
         if (timeEnd == null) {
             return;
