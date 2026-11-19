@@ -193,7 +193,7 @@ class ClickApiIntegrationTest {
         adImpressionRepository.save(AdImpression.builder()
                 .notificationId(notificationId)
                 .campaignId(CAMPAIGN_ID)
-                .targetUserId(100L)
+                .userId(100L)
                 .shownAt(LocalDateTime.now())
                 .build());
     }

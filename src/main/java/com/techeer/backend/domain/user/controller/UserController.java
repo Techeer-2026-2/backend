@@ -44,7 +44,8 @@ public class UserController {
 
     @Operation(
             summary = "내 정보 수정",
-            description = "닉네임을 수정한다. 이메일·비밀번호는 이 API 로 바꿀 수 없다.")
+            description = "닉네임·연령대·성별을 수정한다. 보내지 않은 값은 그대로 둔다. "
+                    + "연령대·성별은 배너 매칭에 쓴다. 이메일·비밀번호는 이 API 로 바꿀 수 없다.")
     @ApiResponse(responseCode = "200", description = "수정 성공")
     @ApiResponse(responseCode = "400", description = "요청 값 오류",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))

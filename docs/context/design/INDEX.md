@@ -13,3 +13,4 @@
 | [2026-10-29-campaign-banner-image-s3](api/2026-10-29-campaign-banner-image-s3.md) | 제안 | 캠페인 등록·수정을 multipart(request JSON + image 파일)로 바꾸고 이미지는 S3 에 저장, 운영 권한은 EC2 IAM 역할로 받는다 |
 | [2026-11-09-ranking-track-artwork-duration](api/2026-11-09-ranking-track-artwork-duration.md) | 제안 | 차트 API 의 track 에 artworkUrl·trackTimeMillis 를 내려주기 위해 ranking.track 에 nullable 컬럼 2개를 추가하고 곡 등록 PUT 으로 받는다 |
 | [2026-11-12-campaign-spend-and-detail-api](api/2026-11-12-campaign-spend-and-detail-api.md) | 확정 | 노출당 차감은 min(내 입찰가, 다음 경쟁가+1원)로 하고 필드는 #128 이름, 추이는 시간·일, AI 요약은 Claude API, PDF는 OpenPDF를 쓴다 |
+| [2026-11-19-banner-match-by-member](db/2026-11-19-banner-match-by-member.md) | 제안 | target_users 를 없애고 users 에 age_group·gender 를 추가해 /banners/match 는 @MemberId 회원으로 매칭하며 노출·클릭의 target_user_id 컬럼에는 회원 ID 를 담는다 |
