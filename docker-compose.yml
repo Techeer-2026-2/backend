@@ -1,5 +1,5 @@
 # 로컬 개발용 스택 — 팀원 누구나 `docker compose up -d` 한 번으로 동일 환경 기동
-# Phase 1 범위: PostgreSQL + API 서버만. Redis/Kafka/ClickHouse는 P3에서 추가.
+# 현재 범위: PostgreSQL + API 서버. 고도화(2026-11)에서 Kafka·ClickHouse 서비스를 추가한다. Redis는 추가하지 않는다 (2026-11-22).
 services:
   db:
     image: postgres:16-alpine
