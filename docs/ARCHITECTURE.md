@@ -35,15 +35,15 @@
 ├── NGINX (리버스 프록시)
 ├── Spring Boot (API 서버 — 계정/캠페인/배너/클릭 전부 하나의 애플리케이션, 모놀리식+역할분리, MSA 아님)
 ├── PostgreSQL (P1~)
-├── Redis (현재 용도 보류 — 알림 보류로 실질 사용처 없음)
-├── Kafka (P3, click-events 토픽만)
+├── Redis (추가하지 않음 — 2026-11-22 결정. 요청 중복은 DB 유니크 표로 막음)
+├── Kafka (고도화 2026-11, 토픽 ad-clicked · ad-impressed, 브로커 1대. 클릭 발행 실패분만 DB `click_fallback`에 임시 보관)
 └── Prometheus + Grafana (P3, 모니터링)
 
 [별도 EC2 또는 같은 서버 내 분리 — DB 계층]
 ├── PostgreSQL
-└── ClickHouse (P3, OLAP — Kafka Engine + Materialized View)
+└── ClickHouse (고도화 2026-11, 집계 전용 — Kafka Engine + Materialized View)
 
-[Amazon S3] — 원본 클릭 로그 적재 (P3)
+[Amazon S3] — 클릭·노출 원본 적재 (고도화 2026-11, 재계산 입력)
 ```
 
 **⚠️ 아직 미정**: GitHub 저장소를 모노레포(프론트+백엔드 한 저장소)로 할지, 분리할지 팀 결정 필요.
@@ -63,12 +63,12 @@ React + Vite + Zustand + Tailwind + TanStack Query
 
 ### 2-D. 설계 원칙 (왜 이렇게 구성했는지)
 
-- **Kafka/Redis/ClickHouse/S3는 전부 Phase 3부터 도입.** 처음부터 넣지 않고 PostgreSQL 단일 구조(P1) 시작 → 부하 테스트 실측 → 단계적 도입.
+- **Kafka·ClickHouse·S3는 고도화(2026-11)에서 도입한다. Redis는 추가하지 않는다 (2026-11-22 결정).** 처음부터 넣지 않고 PostgreSQL 단일 구조로 시작 → 부하 테스트 실측 → 단계적 도입.
 - **Kafka 도입 근거(계산)**: 가상 유저 10만 명, 동시 캠페인 200개, 캠페인당 평균 750명 타겟, 클릭률 25% 가정 시 피크 시 초당 약 1,125건 클릭이 동일 `campaign_stats` 행에 집중 → PostgreSQL 단일 행 UPDATE 한계(초당 수백 건) 근접/초과 예상.
-- **OLAP(ClickHouse) 도입 근거**: 멘토 피드백 — "Kafka 원본 테이블에 직접 SELECT하면 응답속도 문제, Roll-up + Materialized View로 미리 집계된 결과 테이블을 따로 둬야 함." → `click_events_kafka`(통로) → MV → `click_facts`(SummingMergeTree, 실제 저장) 구조로 해결.
+- **OLAP(ClickHouse) 도입 근거**: 멘토 피드백 — "Kafka 원본 테이블에 직접 SELECT하면 응답속도 문제, Roll-up + Materialized View로 미리 집계된 결과 테이블을 따로 둬야 함." → `clicks_kafka`/`impressions_kafka`(통로) → MV → `click_facts`/`impression_facts`(SummingMergeTree, 실제 저장) + 시간·일 롤업 구조로 해결.
 - **S3 원시 데이터 보관 이유**: 실시간 집계는 빠르지만 드물게 오차 가능 → 원본을 S3에 그대로 보관, 재집계 서비스가 주기적으로 재계산해 대조/보정.
 - **노출(impression)과 클릭(click) 분리 기록**: CTR = 클릭수 ÷ 노출수 계산을 위해 `ad_impressions` 테이블 별도 존재.
-- **MSA 아님**: "이벤트 기반 워커 분리" 구조. 서비스들이 PostgreSQL/Redis를 공유하고 REST가 아닌 Kafka 큐로만 연결됨.
+- **MSA 아님**: 모놀리식 1개 서비스. 쓰기 경로(광고 API)와 재집계 저장·확정 작업은 같은 코드베이스에서 역할을 나눠 돈다. 이벤트는 Kafka로 연결한다.
 
 ---
 
@@ -290,42 +290,30 @@ CREATE TABLE popular_track_ranking (  -- 주변 인기곡 집계 결과. geo_cel
 
 **빠진 테이블**: `recommendation`은 ERD에서 SQL 자체가 깨져서 export됐고(FK 선언이 COMMENT 문자열 안에 섞여 들어감) 실제 사용 여부도 불확실해 제외.
 
-### 3-C. ClickHouse (Phase 3, 별도 다이어그램/DB)
+### 3-C. ClickHouse (고도화 2026-11, 집계 전용)
 
-```sql
-CREATE TABLE click_events_kafka (  -- 통로 역할, 저장 안 됨
-    campaign_id BIGINT,
-    notification_id String,
-    clicked_at DateTime
-) ENGINE = Kafka
-SETTINGS kafka_broker_list = 'kafka:9092',
-         kafka_topic_list = 'click-events',
-         kafka_group_name = 'clickhouse-group',
-         kafka_format = 'JSONEachRow';
+> 정본: `docs/고도화/고도화_개발지시서.md` 5-2 (DDL 전체). 아래는 요약이다.
+> 원본 한 건씩은 저장하지 않는다. 원본은 S3(3-D)에 있다.
 
-CREATE TABLE click_facts (  -- 실제 저장되는 롤업 결과
-    campaign_id BIGINT,
-    minute DateTime,
-    click_count UInt32
-) ENGINE = SummingMergeTree()
-ORDER BY (campaign_id, minute);
+| 표 | 엔진 | 역할 |
+|---|---|---|
+| `impressions_kafka`, `clicks_kafka` | Kafka 엔진 | `ad-impressed`, `ad-clicked` 토픽을 읽는 통로 (저장 안 함) |
+| `impression_facts`, `click_facts` | SummingMergeTree (분) | MV가 메시지마다 분·연령대·성별 합계를 더함 (잠정) |
+| `impression_facts_hour/_day`, `click_facts_hour/_day` | SummingMergeTree | 분 표에서 MV로 만든 롤업 |
+| `*_stage` | 같은 구조 | 재계산 때만 채우고 파티션을 교체 (확정) |
 
-CREATE MATERIALIZED VIEW click_facts_mv TO click_facts AS
-SELECT campaign_id, toStartOfMinute(clicked_at) AS minute, count() AS click_count
-FROM click_events_kafka
-GROUP BY campaign_id, minute;
-```
+- 중복은 실시간에서 제거하지 않는다. 확정은 매일 03:00 재계산(S3 원본 + `GROUP BY notification_id`)이 한다.
 
 ### 3-D. S3 (테이블 아님, 파일 저장 규칙)
 
 ```
-버킷: raw-click-data
-경로: raw-clicks/{year}/{month}/{day}/{hour}/*.json
-형식: JSON Lines (한 줄 = 클릭 이벤트 1건)
-필드: notification_id, campaign_id, clicked_at
+버킷: RAW_S3_BUCKET (재계산 원본용. 배너 이미지용 S3_BUCKET과 별도)
+경로: raw-clicks/{yyyy}/{MM}/{dd}/{HH}/{batch_id}.json
+      raw-impressions/{yyyy}/{MM}/{dd}/{HH}/{batch_id}.json
+형식: JSON Lines (한 줄 = 메시지 1개)
+필드: notification_id, campaign_id, age_group, gender, event_at
+날짜 기준: event_at (서버가 요청을 받은 시각, 한국 시간)
 ```
-
----
 
 ## 4. CI/CD 요구사항 (GitHub 세팅 시 참고)
 
