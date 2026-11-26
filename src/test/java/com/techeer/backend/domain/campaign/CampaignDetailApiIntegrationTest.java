@@ -13,7 +13,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.techeer.backend.ClickFactsFixture;
 import com.techeer.backend.TestcontainersConfiguration;
+import com.techeer.backend.global.config.ClickHouseConfig;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import com.techeer.backend.domain.auth.jwt.JwtTokenProvider;
 import com.techeer.backend.domain.campaign.entity.Campaign;
 import com.techeer.backend.domain.campaign.entity.CampaignStatus;
@@ -88,10 +92,15 @@ class CampaignDetailApiIntegrationTest {
         when(imageStorage.upload(anyString(), any(), any())).thenReturn(NEW_IMAGE_URL);
     }
 
+    @Autowired
+    @Qualifier(ClickHouseConfig.QUALIFIER)
+    private NamedParameterJdbcTemplate clickHouseJdbc;
+
     @AfterEach
     void tearDown() {
         campaignStatsRepository.deleteAll();
         campaignRepository.deleteAll();
+        ClickFactsFixture.clear(clickHouseJdbc);
     }
 
     @Test
@@ -112,6 +121,21 @@ class CampaignDetailApiIntegrationTest {
                 .andExpect(jsonPath("$.spentTotal").value(0))
                 .andExpect(jsonPath("$.remainingBudget").value(100000))
                 .andExpect(jsonPath("$.targetClicks").value(300));
+    }
+
+    @Test
+    @DisplayName("캠페인 목록의 클릭수는 ClickHouse 누적 클릭 합계다")
+    void listsCampaignsWithClickHouseClicks() throws Exception {
+        Campaign withClicks = saveOngoingCampaign();
+        Campaign withoutClicks = saveOngoingCampaign();
+        saveStats(withClicks, 50, 7);
+        ClickFactsFixture.addClicks(clickHouseJdbc, withClicks.getCampaignId(), 3);
+
+        mockMvc.perform(get("/api/v1/campaigns").header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.campaignId == " + withClicks.getCampaignId() + ")].impressionCount").value(50))
+                .andExpect(jsonPath("$[?(@.campaignId == " + withClicks.getCampaignId() + ")].clickCount").value(10))
+                .andExpect(jsonPath("$[?(@.campaignId == " + withoutClicks.getCampaignId() + ")].clickCount").value(0));
     }
 
     @Test
@@ -498,11 +522,13 @@ class CampaignDetailApiIntegrationTest {
                 .build());
     }
 
+    /** 노출 수는 PostgreSQL campaign_stats 에, 누적 클릭 수는 ClickHouse click_facts 에 넣는다. */
     private void saveStats(Campaign campaign, long sentCount, long clickCount) {
         jdbcTemplate.update("""
                 INSERT INTO campaign_stats (campaign_id, sent_count, click_count, created_at, updated_at)
-                VALUES (?, ?, ?, now(), now())
-                """, campaign.getCampaignId(), sentCount, clickCount);
+                VALUES (?, ?, 0, now(), now())
+                """, campaign.getCampaignId(), sentCount);
+        ClickFactsFixture.addClicks(clickHouseJdbc, campaign.getCampaignId(), clickCount);
     }
 
     private Campaign reload(Campaign campaign) {
