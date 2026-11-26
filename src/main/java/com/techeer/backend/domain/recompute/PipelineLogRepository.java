@@ -65,6 +65,23 @@ final class PipelineLogRepository {
                 """, (rs, row) -> new ArchiveTotals(rs.getInt(1), rs.getLong(2), rs.getLong(3)), date);
     }
 
+    long impressions(LocalDate date) {
+        return jdbc.queryForObject("""
+                SELECT count(*) FROM ad_impressions WHERE shown_at >= ? AND shown_at < ?
+                """, Long.class, date.atStartOfDay(), date.plusDays(1).atStartOfDay());
+    }
+
+    void recordReconciliation(long id, Long consumed, Long s3Lines, Long unique, Long daily, Long impressions,
+            boolean ok, String error) {
+        jdbc.update("""
+                UPDATE recompute_log
+                SET kafka_read_count = ?, s3_line_count = ?, s3_unique_count = ?, ch_daily_count = ?,
+                    pg_impression_count = ?, reconcile_ok = ?,
+                    error_message = CASE WHEN status = 'FAILED' THEN coalesce(error_message, ?) ELSE ? END
+                WHERE recompute_id = ?
+                """, consumed, s3Lines, unique, daily, impressions, ok, error, error, id);
+    }
+
     void serializeJobs(Runnable job) {
         // A separate PostgreSQL transaction holds the lock while the log writes commit independently.
         try (var connection = dataSource.getConnection()) {

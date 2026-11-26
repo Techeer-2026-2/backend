@@ -58,11 +58,11 @@ class RecomputePipelineIntegrationTest {
             .waitingFor(Wait.forHttp("/ping").forPort(8123));
 
     @Test
-    void archivesEventsAndReplacesRollupsIdempotently() {
+    void archivesEventsReplacesRollupsIdempotentlyAndDetectsArchiveDrift() {
         LocalDate day = LocalDate.now(CLOCK).minusDays(1);
         var postgres = new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         var pg = new JdbcTemplate(postgres);
-        initPostgres(postgres);
+        initPostgres(postgres, pg, day);
         var logs = new PipelineLogRepository(pg, postgres, CLOCK);
         var mapper = new ObjectMapper();
         var buffer = new RawBatchBuffer(mapper);
@@ -101,11 +101,21 @@ class RecomputePipelineIntegrationTest {
                     "impression_facts_hour", "impression_facts_day")) {
                 assertThat(ch.queryForObject("SELECT sum(cnt) FROM " + table, Long.class)).isEqualTo(1);
             }
+
+            var reconcile = new ReconcileJob(sql, logs);
+            reconcile.run(day, day);
+            assertThat(reconcileOk(pg, logs.latestRun(day).id())).isTrue();
+            String clickFile = s3.listObjectsV2(req -> req.bucket(BUCKET).prefix("raw-clicks/")).contents().getFirst().key();
+            s3.deleteObject(req -> req.bucket(BUCKET).key(clickFile));
+            reconcile.run(day, day);
+            assertThat(reconcileOk(pg, logs.latestRun(day).id())).isFalse();
         }
     }
 
-    private void initPostgres(DriverManagerDataSource source) {
+    private void initPostgres(DriverManagerDataSource source, JdbcTemplate pg, LocalDate day) {
         new ResourceDatabasePopulator(new FileSystemResource("docs/sql/ad-pipeline/004_recompute_log.sql")).execute(source);
+        pg.execute("CREATE TABLE ad_impressions (shown_at TIMESTAMP NOT NULL)");
+        pg.update("INSERT INTO ad_impressions (shown_at) VALUES (?)", day.atTime(8, 0));
     }
 
     private S3Client minioClient() {
@@ -140,6 +150,10 @@ class RecomputePipelineIntegrationTest {
                 ENGINE = SummingMergeTree PARTITION BY toYYYYMMDD(%s) ORDER BY (campaign_id, %s, age_group, gender)
                 """.formatted(table, bucket, dateType, bucket, bucket));
         ch.execute("CREATE TABLE " + table + "_stage AS " + table);
+    }
+
+    private Boolean reconcileOk(JdbcTemplate pg, long id) {
+        return pg.queryForObject("SELECT reconcile_ok FROM recompute_log WHERE recompute_id = ?", Boolean.class, id);
     }
 
     private String event(LocalDate day, UUID notification, String extra) {

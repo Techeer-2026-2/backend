@@ -129,3 +129,6 @@ recompute:
   cron: "0 0 3 * * *"
   window-days: 2
   sql-location: "classpath:clickhouse/recompute"
+
+reconcile:
+  cron: "0 30 3 * * *"

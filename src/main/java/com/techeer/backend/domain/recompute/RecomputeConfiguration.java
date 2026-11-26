@@ -64,8 +64,9 @@ class RecomputeConfiguration {
 
         @Bean
         @Profile("!recompute-command")
-        RecomputeSchedule recomputeSchedule(RecomputeJob job, Clock clock, @Value("${recompute.window-days:2}") int days) {
-            return new RecomputeSchedule(job, clock, days);
+        RecomputeSchedule recomputeSchedule(RecomputeJob job, RecomputeSql sql, PipelineLogRepository logs,
+                Clock clock, @Value("${recompute.window-days:2}") int days) {
+            return new RecomputeSchedule(job, new ReconcileJob(sql, logs), clock, days);
         }
 
         @Bean
