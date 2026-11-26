@@ -132,3 +132,8 @@ recompute:
 
 reconcile:
   cron: "0 30 3 * * *"
+
+click:
+  copy:
+    enabled: false
+    batch-size: 500

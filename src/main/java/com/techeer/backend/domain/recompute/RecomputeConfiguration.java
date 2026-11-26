@@ -14,6 +14,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration(proxyBeanMethods = false)
 class RecomputeConfiguration {
@@ -39,6 +40,16 @@ class RecomputeConfiguration {
         var consumer = new RawArchiveConsumer(new RawBatchBuffer(mapper), writer, logs);
         return new KafkaBatchConsumer(kafka, "raw-archive", List.of(AdEvent.CLICKED, AdEvent.IMPRESSED), 3, 1_000,
                 Duration.ofMinutes(1), consumer::archive);
+    }
+
+    @Bean
+    @Profile("!recompute-command")
+    @ConditionalOnProperty(name = "click.copy.enabled", havingValue = "true")
+    KafkaBatchConsumer clickCopyConsumer(KafkaProperties kafka, ObjectMapper mapper, JdbcTemplate jdbc,
+            TransactionTemplate transaction, @Value("${click.copy.batch-size:500}") int batchSize) {
+        var consumer = new ClickCopyConsumer(mapper, jdbc, transaction);
+        return new KafkaBatchConsumer(kafka, "click-copy", List.of(AdEvent.CLICKED), 1, batchSize,
+                Duration.ofSeconds(1), consumer::copy);
     }
 
     @Configuration(proxyBeanMethods = false)

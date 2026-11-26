@@ -18,8 +18,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -83,7 +85,10 @@ class RecomputePipelineIntegrationTest {
             initBucket(s3);
             var writer = new S3RawWriter(s3, BUCKET);
             new RawArchiveConsumer(buffer, writer, logs).archive(records);
+            var copy = new ClickCopyConsumer(mapper, pg, new TransactionTemplate(new DataSourceTransactionManager(postgres)));
+            copy.copy(records.subList(0, 2));
             assertThat(logs.archives(day).written()).isEqualTo(3);
+            assertThat(pg.queryForObject("SELECT count(*) FROM click_events", Long.class)).isEqualTo(1);
 
             String url = "jdbc:clickhouse://" + CLICKHOUSE.getHost() + ":" + CLICKHOUSE.getMappedPort(8123) + "/default";
             var ch = new JdbcTemplate(new DriverManagerDataSource(url, "default", ""));
@@ -116,6 +121,12 @@ class RecomputePipelineIntegrationTest {
         new ResourceDatabasePopulator(new FileSystemResource("docs/sql/ad-pipeline/004_recompute_log.sql")).execute(source);
         pg.execute("CREATE TABLE ad_impressions (shown_at TIMESTAMP NOT NULL)");
         pg.update("INSERT INTO ad_impressions (shown_at) VALUES (?)", day.atTime(8, 0));
+        pg.execute("""
+                CREATE TABLE click_events (
+                    notification_id VARCHAR(36) PRIMARY KEY, campaign_id BIGINT NOT NULL, target_user_id BIGINT NOT NULL,
+                    clicked_at TIMESTAMP NOT NULL, created_at TIMESTAMP NOT NULL, updated_at TIMESTAMP NOT NULL
+                )
+                """);
     }
 
     private S3Client minioClient() {
