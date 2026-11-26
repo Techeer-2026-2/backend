@@ -161,7 +161,7 @@ class BannerApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("배너 응답의 notificationId 로 클릭을 기록할 수 있다")
+    @DisplayName("배너 응답의 notificationId 로 클릭을 보낼 수 있다 (클릭은 click_count 를 올리지 않는다)")
     void matchedBannerCanBeClicked() throws Exception {
         TargetUser user = saveUser(AGE_20S);
         Campaign campaign = saveCampaign(AGE_20S, CampaignStatus.ACTIVE, daysFromNow(-1), daysFromNow(1));
@@ -177,7 +177,7 @@ class BannerApiIntegrationTest {
 
         CampaignStats stats = campaignStatsRepository.findById(campaign.getCampaignId()).orElseThrow();
         assertThat(stats.getSentCount()).isEqualTo(1);
-        assertThat(stats.getClickCount()).isEqualTo(1);
+        assertThat(stats.getClickCount()).isZero();
     }
 
     @Test
