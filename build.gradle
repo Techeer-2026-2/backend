@@ -33,6 +33,7 @@ ext {
 	springdocVersion = '2.8.6'
 	jjwtVersion = '0.12.6'
 	awsSdkVersion = '2.55.16'
+	clickhouseJdbcVersion = '0.11.2'
 }
 
 dependencies {
@@ -64,6 +65,8 @@ dependencies {
 	annotationProcessor 'org.projectlombok:lombok'
 
 	runtimeOnly 'org.postgresql:postgresql'
+	// 광고 집계용 ClickHouse 드라이버 (고도화 2026-11). Spring Boot 가 버전을 관리하지 않아 버전을 직접 지정한다.
+	runtimeOnly "com.clickhouse:clickhouse-jdbc:${clickhouseJdbcVersion}"
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
