@@ -42,6 +42,14 @@ public class User extends BaseEntity {
     @Column(length = 64)
     private String refreshTokenHash;
 
+    /** 연령대 (10s~50s). 배너 매칭에 쓴다. 입력하지 않았으면 null 이고, 그동안은 배너를 보여 주지 않는다. */
+    @Column(length = 16)
+    private String ageGroup;
+
+    /** 성별 (male, female). 입력하지 않았으면 null 이고, 성별 제한이 없는(all) 캠페인만 맞는다. */
+    @Column(length = 8)
+    private String gender;
+
     private User(String email, String passwordHash, String nickname) {
         this.email = email;
         this.passwordHash = passwordHash;
@@ -67,5 +75,17 @@ public class User extends BaseEntity {
      */
     public void changeNickname(String nickname) {
         this.nickname = nickname;
+    }
+
+    /**
+     * 배너 매칭에 쓰는 연령대·성별을 바꾼다. null 인 값은 그대로 둔다. 값이 허용 목록에 있는지는 요청 DTO 가 검증한다.
+     */
+    public void changeDemographics(String ageGroup, String gender) {
+        if (ageGroup != null) {
+            this.ageGroup = ageGroup;
+        }
+        if (gender != null) {
+            this.gender = gender;
+        }
     }
 }

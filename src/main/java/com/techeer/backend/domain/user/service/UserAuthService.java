@@ -61,6 +61,7 @@ public class UserAuthService {
             throw new BusinessException(ErrorCode.EMAIL_DUPLICATED);
         }
         User user = User.create(email, passwordEncoder.encode(request.password()), request.nickname().trim());
+        user.changeDemographics(request.ageGroup(), request.gender());
         try {
             // save 가 아니라 saveAndFlush: 제약 위반이 이 try 안에서 바로 드러나야 잡을 수 있다.
             userRepository.saveAndFlush(user);
