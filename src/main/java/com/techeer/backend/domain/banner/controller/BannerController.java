@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -37,8 +38,11 @@ public class BannerController {
     @GetMapping("/banners/match")
     public ResponseEntity<BannerResponse> matchBanner(
             @Parameter(description = "배너를 볼 타겟 유저 ID", example = "100")
-            @RequestParam Long targetUserId) {
-        return bannerService.matchBanner(targetUserId)
+            @RequestParam Long targetUserId,
+            @Parameter(description = "요청 ID (UUID). 재시도는 같은 값을 보낸다. 없으면 중복 방지 없이 처리한다 (#173 에서 필수화)")
+            @RequestHeader(value = "X-Request-Id", required = false) String requestId) {
+        String id = requestId != null ? requestId : java.util.UUID.randomUUID().toString();
+        return bannerService.matchBanner(targetUserId, id)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }

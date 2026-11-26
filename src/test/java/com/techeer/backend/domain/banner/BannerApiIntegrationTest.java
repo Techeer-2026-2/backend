@@ -19,10 +19,15 @@ import com.techeer.backend.domain.stats.entity.CampaignStats;
 import com.techeer.backend.domain.stats.repository.CampaignStatsRepository;
 import com.techeer.backend.domain.targetuser.entity.TargetUser;
 import com.techeer.backend.domain.targetuser.repository.TargetUserRepository;
+import com.techeer.backend.domain.banner.dto.BannerResponse;
 import com.techeer.backend.domain.banner.service.BannerService;
+import com.techeer.backend.domain.outbox.entity.OutboxEvent;
+import com.techeer.backend.domain.outbox.repository.OutboxEventRepository;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -75,10 +80,15 @@ class BannerApiIntegrationTest {
     private BannerService bannerService;
 
     @Autowired
+    private OutboxEventRepository outboxEventRepository;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @AfterEach
     void tearDown() {
+        outboxEventRepository.deleteAll();
+        jdbcTemplate.update("DELETE FROM banner_requests");
         clickEventRepository.deleteAll();
         campaignStatsRepository.deleteAll();
         adImpressionRepository.deleteAll();
@@ -270,7 +280,7 @@ class BannerApiIntegrationTest {
         for (int i = 0; i < requests; i++) {
             results.add(pool.submit(() -> {
                 start.await();
-                return bannerService.matchBanner(user.getTargetUserId()).isPresent();
+                return bannerService.matchBanner(user.getTargetUserId(), java.util.UUID.randomUUID().toString()).isPresent();
             }));
         }
         long shown = 0;
@@ -303,6 +313,51 @@ class BannerApiIntegrationTest {
         mockMvc.perform(matchRequest(user.getTargetUserId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.campaignId").value(campaign.getCampaignId()));
+    }
+
+    @Test
+    @DisplayName("같은 요청 ID 로 다시 오면 차감 없이 같은 배너를 돌려준다")
+    void sameRequestIdReturnsSameBannerWithoutSecondCharge() {
+        TargetUser user = saveUser(AGE_20S);
+        Campaign campaign = saveBidCampaign(AGE_20S, 100_000, 50);
+        String requestId = UUID.randomUUID().toString();
+
+        Optional<BannerResponse> first = bannerService.matchBanner(user.getTargetUserId(), requestId);
+        Optional<BannerResponse> retry = bannerService.matchBanner(user.getTargetUserId(), requestId);
+
+        assertThat(first).isPresent();
+        assertThat(retry).isPresent();
+        assertThat(retry.get().notificationId()).isEqualTo(first.get().notificationId());
+        assertThat(adImpressionRepository.findAll()).hasSize(1);
+        assertThat(campaignRepository.findById(campaign.getCampaignId()).orElseThrow().getSpentTotal()).isEqualTo(50);
+    }
+
+    @Test
+    @DisplayName("노출이 나가면 같은 트랜잭션에서 PENDING 아웃박스 행이 생긴다")
+    void impressionWritesPendingOutboxRow() {
+        TargetUser user = saveUser(AGE_20S);
+        saveBidCampaign(AGE_20S, 100_000, 50);
+
+        BannerResponse banner = bannerService.matchBanner(user.getTargetUserId(), UUID.randomUUID().toString())
+                .orElseThrow();
+
+        List<OutboxEvent> pending = outboxEventRepository.findTop500ByStatusOrderByOutboxIdAsc(OutboxEvent.Status.PENDING);
+        assertThat(pending).hasSize(1);
+        assertThat(pending.get(0).getNotificationId()).isEqualTo(banner.notificationId());
+        assertThat(pending.get(0).getEventType()).isEqualTo("AD_IMPRESSED");
+        assertThat(pending.get(0).getPayload()).contains("\"notification_id\":\"" + banner.notificationId() + "\"");
+    }
+
+    @Test
+    @DisplayName("후보가 없어도 요청 ID 는 남고, 같은 ID 재시도는 빈 결과를 돌려준다")
+    void noCandidateIsRememberedForRetry() {
+        TargetUser user = saveUser(AGE_20S);
+        String requestId = UUID.randomUUID().toString();
+
+        assertThat(bannerService.matchBanner(user.getTargetUserId(), requestId)).isEmpty();
+        assertThat(bannerService.matchBanner(user.getTargetUserId(), requestId)).isEmpty();
+        assertThat(adImpressionRepository.findAll()).isEmpty();
+        assertThat(outboxEventRepository.findAll()).isEmpty();
     }
 
     private Campaign saveBidCampaign(String ageGroup, long totalBudget, long bidPrice) {

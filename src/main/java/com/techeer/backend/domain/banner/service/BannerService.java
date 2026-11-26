@@ -1,10 +1,17 @@
 package com.techeer.backend.domain.banner.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.techeer.backend.domain.banner.dto.BannerResponse;
+import com.techeer.backend.domain.banner.entity.BannerRequest;
+import com.techeer.backend.domain.banner.repository.BannerRequestRepository;
 import com.techeer.backend.domain.campaign.entity.Campaign;
 import com.techeer.backend.domain.campaign.repository.CampaignRepository;
 import com.techeer.backend.domain.impression.entity.AdImpression;
 import com.techeer.backend.domain.impression.repository.AdImpressionRepository;
+import com.techeer.backend.domain.outbox.dto.AdEventPayload;
+import com.techeer.backend.domain.outbox.entity.OutboxEvent;
+import com.techeer.backend.domain.outbox.repository.OutboxEventRepository;
 import com.techeer.backend.domain.stats.repository.CampaignStatsRepository;
 import com.techeer.backend.domain.targetuser.entity.TargetUser;
 import com.techeer.backend.domain.targetuser.repository.TargetUserRepository;
@@ -12,6 +19,7 @@ import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -22,37 +30,47 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 연령대 매칭 배너 노출. 배너를 돌려줄 때마다 노출 1건(notification_id)을 기록한다.
+ * 연령대 매칭 배너 노출. 배너를 돌려줄 때마다 노출 1건(notification_id)을 기록하고,
+ * 같은 트랜잭션에서 Kafka 발행용 아웃박스 행을 남긴다. 발행은 릴레이가 나중에 한다.
  */
 @Service
 @RequiredArgsConstructor
 public class BannerService {
 
+    private static final DateTimeFormatter EVENT_AT_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     private final TargetUserRepository targetUserRepository;
     private final CampaignRepository campaignRepository;
     private final AdImpressionRepository adImpressionRepository;
     private final CampaignStatsRepository campaignStatsRepository;
+    private final BannerRequestRepository bannerRequestRepository;
+    private final OutboxEventRepository outboxEventRepository;
+    private final ObjectMapper objectMapper;
     private final Clock clock;
 
     /**
-     * 후보 중 입찰가에 비례한 확률로 1개를 골라 예산을 차감하고 노출을 기록한다.
-     * 고른 캠페인의 예산이 그 사이 모자라졌으면 그 캠페인을 빼고 다시 고른다.
+     * 같은 요청 ID 의 재시도면 차감·노출 없이 저장된 결과를 돌려준다.
+     * 처음 요청이면 후보 중 입찰가에 비례한 확률로 1개를 골라 예산을 차감하고 노출을 기록한다.
      *
      * @return 매칭되는, 예산이 남은 진행 중 캠페인이 없으면 empty
      */
     @Transactional
-    public Optional<BannerResponse> matchBanner(Long targetUserId) {
+    public Optional<BannerResponse> matchBanner(Long targetUserId, String requestId) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        // 요청 ID 를 먼저 넣는다. 이미 있으면 재시도이므로 저장된 결과를 돌려준다.
+        if (bannerRequestRepository.insertIfAbsent(requestId, targetUserId, now) == 0) {
+            return replay(requestId);
+        }
+
         TargetUser targetUser = targetUserRepository.findById(targetUserId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TARGET_USER_NOT_FOUND));
-
-        LocalDateTime now = LocalDateTime.now(clock);
         List<Campaign> candidates = new ArrayList<>(campaignRepository.findActiveForTarget(
                 targetUser.getAgeGroup(), toGenderCode(targetUser.getGender()), now));
         while (!candidates.isEmpty()) {
             Campaign winner = BidAuction.pick(candidates, ThreadLocalRandom.current().nextDouble());
             long charge = BidAuction.charge(winner, candidates);
             if (campaignRepository.deductBudget(winner.getCampaignId(), charge) == 1) {
-                return Optional.of(recordImpression(winner, targetUser, charge, now));
+                return Optional.of(recordImpression(requestId, winner, targetUser, charge, now));
             }
             candidates.remove(winner);
         }
@@ -75,23 +93,53 @@ public class BannerService {
         };
     }
 
-    private static String blankToNull(String value) {
-        return value == null || value.isBlank() ? null : value;
+    private Optional<BannerResponse> replay(String requestId) {
+        BannerRequest previous = bannerRequestRepository.findById(requestId).orElseThrow();
+        if (previous.getNotificationId() == null) {
+            return Optional.empty();
+        }
+        AdImpression impression = adImpressionRepository.findById(previous.getNotificationId()).orElseThrow();
+        Campaign campaign = campaignRepository.findById(impression.getCampaignId()).orElseThrow();
+        return Optional.of(BannerResponse.of(impression.getNotificationId(), campaign));
     }
 
-    private BannerResponse recordImpression(Campaign campaign, TargetUser targetUser, long charge,
-            LocalDateTime now) {
+    private BannerResponse recordImpression(String requestId, Campaign campaign, TargetUser targetUser,
+            long charge, LocalDateTime now) {
         String notificationId = UUID.randomUUID().toString();
+        String ageGroup = orUnknown(targetUser.getAgeGroup());
+        String gender = orUnknown(toGenderCode(targetUser.getGender()));
+
         adImpressionRepository.save(AdImpression.builder()
                 .notificationId(notificationId)
                 .campaignId(campaign.getCampaignId())
                 .targetUserId(targetUser.getTargetUserId())
                 .shownAt(now)
                 .chargedAmount(charge)
-                .ageGroup(blankToNull(targetUser.getAgeGroup()))
-                .gender(blankToNull(toGenderCode(targetUser.getGender())))
+                .ageGroup(blankToNull(ageGroup))
+                .gender(blankToNull(gender))
                 .build());
         campaignStatsRepository.increaseSentCount(campaign.getCampaignId(), now);
+        outboxEventRepository.save(OutboxEvent.create("AD_IMPRESSED", notificationId,
+                toPayload(notificationId, campaign, ageGroup, gender, now), now));
+        bannerRequestRepository.findById(requestId).orElseThrow().assignNotification(notificationId);
         return BannerResponse.of(notificationId, campaign);
+    }
+
+    private String toPayload(String notificationId, Campaign campaign, String ageGroup, String gender,
+            LocalDateTime now) {
+        try {
+            return objectMapper.writeValueAsString(new AdEventPayload(
+                    notificationId, campaign.getCampaignId(), ageGroup, gender, now.format(EVENT_AT_FORMAT)));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("이벤트 본문 직렬화 실패", e);
+        }
+    }
+
+    private static String orUnknown(String value) {
+        return value == null || value.isBlank() ? "unknown" : value;
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() || "unknown".equals(value) ? null : value;
     }
 }
