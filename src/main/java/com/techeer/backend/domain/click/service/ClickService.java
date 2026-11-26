@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.techeer.backend.domain.click.dto.ClickEventPayload;
 import com.techeer.backend.domain.click.dto.ClickResponse;
+import com.techeer.backend.domain.click.dto.ClickResult;
 import com.techeer.backend.domain.impression.entity.AdImpression;
 import com.techeer.backend.domain.impression.repository.AdImpressionRepository;
 import com.techeer.backend.domain.outbox.EventPublishException;
@@ -15,7 +16,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 클릭 기록. 요청 경로에서 DB 에 쓰지 않는다. 노출을 읽고 Kafka ad-clicked 로 보내는 것이 전부다.
@@ -29,27 +29,37 @@ public class ClickService {
 
     private final AdImpressionRepository adImpressionRepository;
     private final EventPublisher eventPublisher;
+    private final ClickFallbackService clickFallbackService;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
     /**
+     * Kafka 로 보내고, 실패하면 실패 표에 보관한다 (202). 보관도 실패하면 503.
+     *
      * @param notificationId 클릭한 노출의 알림 ID
-     * @return 전송된 클릭 정보
-     * @throws BusinessException 노출이 없으면 IMPRESSION_NOT_FOUND, Kafka 전송이 실패하면 CLICK_PUBLISH_FAILED
+     * @return 전송됐는지(201) 보관됐는지(202) 여부와 클릭 정보
+     * @throws BusinessException 노출이 없으면 IMPRESSION_NOT_FOUND, 보관까지 실패하면 CLICK_PUBLISH_FAILED
      */
-    @Transactional(readOnly = true)
-    public ClickResponse recordClick(String notificationId) {
+    // 트랜잭션을 걸지 않는다. 실패 보관(INSERT)은 ClickFallbackService 가 자기 트랜잭션에서 한다.
+    public ClickResult recordClick(String notificationId) {
         AdImpression impression = adImpressionRepository.findById(notificationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.IMPRESSION_NOT_FOUND));
 
         LocalDateTime now = LocalDateTime.now(clock);
         String key = String.valueOf(impression.getCampaignId());
+        String payload = toPayload(impression, now);
+        ClickResponse click = ClickResponse.of(notificationId, impression.getCampaignId(), now);
         try {
-            eventPublisher.publish(EventPublisher.AD_CLICKED, key, toPayload(impression, now));
+            eventPublisher.publish(EventPublisher.AD_CLICKED, key, payload);
+            return new ClickResult(click, true);
         } catch (EventPublishException e) {
-            throw new BusinessException(ErrorCode.CLICK_PUBLISH_FAILED);
+            try {
+                clickFallbackService.save(notificationId, payload);
+            } catch (RuntimeException saveFailure) {
+                throw new BusinessException(ErrorCode.CLICK_PUBLISH_FAILED);
+            }
+            return new ClickResult(click, false);
         }
-        return ClickResponse.of(notificationId, impression.getCampaignId(), now);
     }
 
     private String toPayload(AdImpression impression, LocalDateTime now) {

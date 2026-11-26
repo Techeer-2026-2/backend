@@ -13,7 +13,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.techeer.backend.TestcontainersConfiguration;
+import com.techeer.backend.domain.click.entity.ClickFallback;
 import com.techeer.backend.domain.click.repository.ClickEventRepository;
+import com.techeer.backend.domain.click.repository.ClickFallbackRepository;
+import com.techeer.backend.domain.click.service.ClickFallbackService;
 import com.techeer.backend.domain.impression.entity.AdImpression;
 import com.techeer.backend.domain.impression.repository.AdImpressionRepository;
 import com.techeer.backend.domain.outbox.EventPublishException;
@@ -30,6 +33,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.RequestBuilder;
 
@@ -61,11 +65,18 @@ class ClickApiIntegrationTest {
     @MockitoBean
     private EventPublisher eventPublisher;
 
+    @MockitoSpyBean
+    private ClickFallbackService clickFallbackService;
+
+    @Autowired
+    private ClickFallbackRepository clickFallbackRepository;
+
     @AfterEach
     void tearDown() {
         clickEventRepository.deleteAll();
         campaignStatsRepository.deleteAll();
         adImpressionRepository.deleteAll();
+        clickFallbackRepository.deleteAll();
     }
 
     @Test
@@ -122,10 +133,26 @@ class ClickApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("Kafka 전송이 실패하면 503 CLICK_PUBLISH_FAILED")
-    void publishFailureReturnsServiceUnavailable() throws Exception {
+    @DisplayName("Kafka 전송이 실패하면 202 로 응답하고 실패 표에 보관한다")
+    void publishFailureIsStoredAndAccepted() throws Exception {
         saveImpression(NOTIFICATION_ID);
         doThrow(new EventPublishException("끊김", null)).when(eventPublisher).publish(any(), any(), any());
+
+        mockMvc.perform(clickRequest(NOTIFICATION_ID))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.notificationId").value(NOTIFICATION_ID));
+
+        assertThat(clickFallbackRepository.findTop500ByStatusOrderByFallbackIdAsc(ClickFallback.Status.PENDING))
+                .hasSize(1);
+        assertThat(clickFallbackRepository.findAll().get(0).getNotificationId()).isEqualTo(NOTIFICATION_ID);
+    }
+
+    @Test
+    @DisplayName("전송도 보관도 실패하면 503 CLICK_PUBLISH_FAILED")
+    void publishAndStoreFailureReturnsServiceUnavailable() throws Exception {
+        saveImpression(NOTIFICATION_ID);
+        doThrow(new EventPublishException("끊김", null)).when(eventPublisher).publish(any(), any(), any());
+        doThrow(new RuntimeException("DB 도 안 됨")).when(clickFallbackService).save(any(), any());
 
         mockMvc.perform(clickRequest(NOTIFICATION_ID))
                 .andExpect(status().isServiceUnavailable())
