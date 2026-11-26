@@ -45,7 +45,7 @@ public class ClickService {
 
         LocalDateTime now = LocalDateTime.now(clock);
         boolean created = clickEventRepository.insertIfAbsent(
-                notificationId, impression.getCampaignId(), impression.getTargetUserId(), now) == 1;
+                notificationId, impression.getCampaignId(), impression.getUserId(), now) == 1;
 
         // 중복 클릭은 집계에 반영하지 않는다.
         if (created) {
