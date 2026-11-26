@@ -316,6 +316,16 @@ class BannerApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("X-Request-Id 헤더가 없으면 400 BANNER_REQUEST_ID_REQUIRED")
+    void missingRequestIdHeaderReturnsBadRequest() throws Exception {
+        TargetUser user = saveUser(AGE_20S);
+
+        mockMvc.perform(get("/api/v1/banners/match").param("targetUserId", String.valueOf(user.getTargetUserId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BANNER_REQUEST_ID_REQUIRED"));
+    }
+
+    @Test
     @DisplayName("같은 요청 ID 로 다시 오면 차감 없이 같은 배너를 돌려준다")
     void sameRequestIdReturnsSameBannerWithoutSecondCharge() {
         TargetUser user = saveUser(AGE_20S);
@@ -426,6 +436,8 @@ class BannerApiIntegrationTest {
     }
 
     private RequestBuilder matchRequest(Long targetUserId) {
-        return get("/api/v1/banners/match").param("targetUserId", String.valueOf(targetUserId));
+        return get("/api/v1/banners/match")
+                .param("targetUserId", String.valueOf(targetUserId))
+                .header("X-Request-Id", UUID.randomUUID().toString());
     }
 }

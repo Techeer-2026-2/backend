@@ -2,6 +2,8 @@ package com.techeer.backend.domain.banner.controller;
 
 import com.techeer.backend.domain.banner.dto.BannerResponse;
 import com.techeer.backend.domain.banner.service.BannerService;
+import com.techeer.backend.global.exception.BusinessException;
+import com.techeer.backend.global.exception.ErrorCode;
 import com.techeer.backend.global.exception.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -39,10 +41,12 @@ public class BannerController {
     public ResponseEntity<BannerResponse> matchBanner(
             @Parameter(description = "배너를 볼 타겟 유저 ID", example = "100")
             @RequestParam Long targetUserId,
-            @Parameter(description = "요청 ID (UUID). 재시도는 같은 값을 보낸다. 없으면 중복 방지 없이 처리한다 (#173 에서 필수화)")
+            @Parameter(description = "요청 ID (UUID). 재시도는 같은 값을 보낸다. 없으면 400")
             @RequestHeader(value = "X-Request-Id", required = false) String requestId) {
-        String id = requestId != null ? requestId : java.util.UUID.randomUUID().toString();
-        return bannerService.matchBanner(targetUserId, id)
+        if (requestId == null || requestId.isBlank() || requestId.length() > 64) {
+            throw new BusinessException(ErrorCode.BANNER_REQUEST_ID_REQUIRED);
+        }
+        return bannerService.matchBanner(targetUserId, requestId)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }
