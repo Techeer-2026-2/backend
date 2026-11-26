@@ -65,6 +65,7 @@ dependencies {
 	annotationProcessor 'org.projectlombok:lombok'
 
 	runtimeOnly 'org.postgresql:postgresql'
+	runtimeOnly('com.clickhouse:clickhouse-jdbc:0.9.6:all') { transitive = false }
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.boot:spring-boot-testcontainers'

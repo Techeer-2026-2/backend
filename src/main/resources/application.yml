@@ -123,3 +123,9 @@ raw:
     bucket: ${RAW_S3_BUCKET:}
     region: ${RAW_S3_REGION:ap-northeast-2}
     endpoint: ""
+
+recompute:
+  enabled: false
+  cron: "0 0 3 * * *"
+  window-days: 2
+  sql-location: "classpath:clickhouse/recompute"
