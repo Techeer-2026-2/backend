@@ -168,7 +168,8 @@ class BannerApiIntegrationTest {
 
         CampaignStats stats = campaignStatsRepository.findById(campaign.getCampaignId()).orElseThrow();
         assertThat(stats.getSentCount()).isEqualTo(1);
-        assertThat(stats.getClickCount()).isEqualTo(1);
+        // 클릭은 요청 경로에서 DB 집계를 하지 않고 Kafka 로 보낸다. 집계는 ClickHouse 와 재계산이 맡는다.
+        assertThat(stats.getClickCount()).isZero();
     }
 
     @Test

@@ -70,7 +70,7 @@ public class ClickService {
                     orUnknown(impression.getAgeGroup()),
                     orUnknown(impression.getGender()),
                     now.format(EVENT_AT_FORMAT),
-                    impression.getTargetUserId()));
+                    impression.getUserId()));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("클릭 본문 직렬화 실패", e);
         }

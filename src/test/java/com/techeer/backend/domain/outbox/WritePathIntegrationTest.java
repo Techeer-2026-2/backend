@@ -19,8 +19,8 @@ import com.techeer.backend.domain.outbox.entity.OutboxEvent;
 import com.techeer.backend.domain.outbox.repository.OutboxEventRepository;
 import com.techeer.backend.domain.outbox.service.OutboxRelay;
 import com.techeer.backend.domain.stats.repository.CampaignStatsRepository;
-import com.techeer.backend.domain.targetuser.entity.TargetUser;
-import com.techeer.backend.domain.targetuser.repository.TargetUserRepository;
+import com.techeer.backend.domain.user.entity.User;
+import com.techeer.backend.domain.user.repository.UserRepository;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -95,7 +95,7 @@ class WritePathIntegrationTest {
     @Autowired
     private CampaignStatsRepository campaignStatsRepository;
     @Autowired
-    private TargetUserRepository targetUserRepository;
+    private UserRepository userRepository;
     @Autowired
     private JdbcTemplate jdbcTemplate;
     @Autowired
@@ -129,9 +129,9 @@ class WritePathIntegrationTest {
     @Test
     void 배너_노출은_릴레이를_거쳐_ad_impressed_로_나간다() throws Exception {
         Campaign campaign = saveCampaign();
-        TargetUser user = saveUser();
+        User user = saveUser();
 
-        BannerResponse banner = bannerService.matchBanner(user.getTargetUserId(), UUID.randomUUID().toString())
+        BannerResponse banner = bannerService.matchBanner(user.getUserId(), UUID.randomUUID().toString())
                 .orElseThrow();
         outboxRelay.relay();
 
@@ -148,8 +148,8 @@ class WritePathIntegrationTest {
     @Test
     void 클릭은_ad_clicked_로_나가고_DB_행을_만들지_않는다() throws Exception {
         saveCampaign();
-        TargetUser user = saveUser();
-        BannerResponse banner = bannerService.matchBanner(user.getTargetUserId(), UUID.randomUUID().toString())
+        User user = saveUser();
+        BannerResponse banner = bannerService.matchBanner(user.getUserId(), UUID.randomUUID().toString())
                 .orElseThrow();
 
         mockMvc.perform(post("/api/v1/clicks").contentType(MediaType.APPLICATION_JSON)
@@ -158,18 +158,18 @@ class WritePathIntegrationTest {
 
         JsonNode message = awaitRecord("ad-clicked",
                 node -> banner.notificationId().equals(node.get("notification_id").asText()));
-        assertThat(message.get("target_user_id").asLong()).isEqualTo(user.getTargetUserId());
+        assertThat(message.get("target_user_id").asLong()).isEqualTo(user.getUserId());
         assertThat(campaignStatsRepository.findAll().get(0).getClickCount()).isZero();
     }
 
     @Test
     void 같은_요청_ID_로_다시_오면_노출과_아웃박스는_한_번만_생긴다() {
         saveCampaign();
-        TargetUser user = saveUser();
+        User user = saveUser();
         String requestId = UUID.randomUUID().toString();
 
-        BannerResponse first = bannerService.matchBanner(user.getTargetUserId(), requestId).orElseThrow();
-        BannerResponse retry = bannerService.matchBanner(user.getTargetUserId(), requestId).orElseThrow();
+        BannerResponse first = bannerService.matchBanner(user.getUserId(), requestId).orElseThrow();
+        BannerResponse retry = bannerService.matchBanner(user.getUserId(), requestId).orElseThrow();
 
         assertThat(retry.notificationId()).isEqualTo(first.notificationId());
         assertThat(adImpressionRepository.count()).isEqualTo(1);
@@ -192,8 +192,10 @@ class WritePathIntegrationTest {
                 .build());
     }
 
-    private TargetUser saveUser() {
-        return targetUserRepository.save(TargetUser.builder().ageGroup(AGE).gender(GENDER).build());
+    private User saveUser() {
+        User user = User.create("u-" + UUID.randomUUID() + "@test.local", "x", "tester");
+        user.changeDemographics(AGE, GENDER);
+        return userRepository.save(user);
     }
 
     /** 토픽을 처음부터 읽어서 조건에 맞는 메시지를 찾는다 (최대 30초). */
