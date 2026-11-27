@@ -51,7 +51,7 @@ jobs:
             cd ~/backend
             docker compose -f docker-compose.prod.yml stop backend || true
             docker compose -f docker-compose.prod.yml build backend
-            docker compose -f docker-compose.prod.yml up -d db backend nginx
+            docker compose -f docker-compose.prod.yml up -d db kafka kafka-init clickhouse backend nginx
             docker image prune -f
           REMOTE
 
