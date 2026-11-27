@@ -118,6 +118,8 @@ clickhouse:
   url: ${CLICKHOUSE_URL:jdbc:clickhouse://localhost:8123/default}
   username: ${CLICKHOUSE_USER:default}
   password: ${CLICKHOUSE_PASSWORD:}
+  # true 이면 앱 기동 시 classpath:clickhouse/*.sql 을 실행한다 (ClickHouseSqlRunner). ClickHouse 에 연결할 수 없으면 앱이 뜨지 않는다.
+  init-schema: true
 
 logging:
   level:
