@@ -13,8 +13,8 @@ import com.techeer.backend.domain.outbox.dto.AdEventPayload;
 import com.techeer.backend.domain.outbox.entity.OutboxEvent;
 import com.techeer.backend.domain.outbox.repository.OutboxEventRepository;
 import com.techeer.backend.domain.stats.repository.CampaignStatsRepository;
-import com.techeer.backend.domain.targetuser.entity.TargetUser;
-import com.techeer.backend.domain.targetuser.repository.TargetUserRepository;
+import com.techeer.backend.domain.user.entity.User;
+import com.techeer.backend.domain.user.repository.UserRepository;
 import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
 import java.time.Clock;
@@ -30,8 +30,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 연령대 매칭 배너 노출. 배너를 돌려줄 때마다 노출 1건(notification_id)을 기록하고,
- * 같은 트랜잭션에서 Kafka 발행용 아웃박스 행을 남긴다. 발행은 릴레이가 나중에 한다.
+ * 연령대 매칭 배너 노출. 로그인한 회원의 연령대·성별로 매칭하고, 노출 1건(notification_id)을 기록한다.
+ * 같은 트랜잭션에서 Kafka 발행용 아웃박스 행을 남기고, 발행은 릴레이가 나중에 한다.
+ * 같은 요청 ID 의 재시도는 차감·노출 없이 저장된 결과를 돌려준다.
  */
 @Service
 @RequiredArgsConstructor
@@ -39,7 +40,7 @@ public class BannerService {
 
     private static final DateTimeFormatter EVENT_AT_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    private final TargetUserRepository targetUserRepository;
+    private final UserRepository userRepository;
     private final CampaignRepository campaignRepository;
     private final AdImpressionRepository adImpressionRepository;
     private final CampaignStatsRepository campaignStatsRepository;
@@ -52,25 +53,32 @@ public class BannerService {
      * 같은 요청 ID 의 재시도면 차감·노출 없이 저장된 결과를 돌려준다.
      * 처음 요청이면 후보 중 입찰가에 비례한 확률로 1개를 골라 예산을 차감하고 노출을 기록한다.
      *
-     * @return 매칭되는, 예산이 남은 진행 중 캠페인이 없으면 empty
+     * @param memberId  배너를 볼 음악 앱 회원 ID (users.user_id)
+     * @param requestId 요청 ID (재시도는 같은 값)
+     * @return 매칭되는, 예산이 남은 진행 중 캠페인이 없거나 회원이 연령대를 입력하지 않았으면 empty
+     * @throws BusinessException 없거나 탈퇴한 회원인 경우
      */
     @Transactional
-    public Optional<BannerResponse> matchBanner(Long targetUserId, String requestId) {
+    public Optional<BannerResponse> matchBanner(Long memberId, String requestId) {
+        User user = userRepository.findByUserIdAndDeletedAtIsNull(memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        // 연령대는 모든 캠페인의 필수 타겟 조건이라, 모르면 맞는 캠페인이 없다.
+        if (user.getAgeGroup() == null) {
+            return Optional.empty();
+        }
         LocalDateTime now = LocalDateTime.now(clock);
         // 요청 ID 를 먼저 넣는다. 이미 있으면 재시도이므로 저장된 결과를 돌려준다.
-        if (bannerRequestRepository.insertIfAbsent(requestId, targetUserId, now) == 0) {
+        if (bannerRequestRepository.insertIfAbsent(requestId, user.getUserId(), now) == 0) {
             return replay(requestId);
         }
 
-        TargetUser targetUser = targetUserRepository.findById(targetUserId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.TARGET_USER_NOT_FOUND));
         List<Campaign> candidates = new ArrayList<>(campaignRepository.findActiveForTarget(
-                targetUser.getAgeGroup(), toGenderCode(targetUser.getGender()), now));
+                user.getAgeGroup(), toGenderCode(user.getGender()), now));
         while (!candidates.isEmpty()) {
             Campaign winner = BidAuction.pick(candidates, ThreadLocalRandom.current().nextDouble());
             long charge = BidAuction.charge(winner, candidates);
             if (campaignRepository.deductBudget(winner.getCampaignId(), charge) == 1) {
-                return Optional.of(recordImpression(requestId, winner, targetUser, charge, now));
+                return Optional.of(recordImpression(requestId, winner, user, charge, now));
             }
             candidates.remove(winner);
         }
@@ -103,16 +111,16 @@ public class BannerService {
         return Optional.of(BannerResponse.of(impression.getNotificationId(), campaign));
     }
 
-    private BannerResponse recordImpression(String requestId, Campaign campaign, TargetUser targetUser,
-            long charge, LocalDateTime now) {
+    private BannerResponse recordImpression(String requestId, Campaign campaign, User user, long charge,
+            LocalDateTime now) {
         String notificationId = UUID.randomUUID().toString();
-        String ageGroup = orUnknown(targetUser.getAgeGroup());
-        String gender = orUnknown(toGenderCode(targetUser.getGender()));
+        String ageGroup = orUnknown(user.getAgeGroup());
+        String gender = orUnknown(toGenderCode(user.getGender()));
 
         adImpressionRepository.save(AdImpression.builder()
                 .notificationId(notificationId)
                 .campaignId(campaign.getCampaignId())
-                .targetUserId(targetUser.getTargetUserId())
+                .userId(user.getUserId())
                 .shownAt(now)
                 .chargedAmount(charge)
                 .ageGroup(blankToNull(ageGroup))
