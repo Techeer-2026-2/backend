@@ -283,7 +283,7 @@ class BannerApiIntegrationTest {
         for (int i = 0; i < requests; i++) {
             results.add(pool.submit(() -> {
                 start.await();
-                return bannerService.matchBanner(user.getUserId()).isPresent();
+                return bannerService.matchBanner(user.getUserId(), UUID.randomUUID().toString()).isPresent();
             }));
         }
         long shown = 0;
