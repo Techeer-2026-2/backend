@@ -1,0 +1,9 @@
+# 이 폴더에 대시보드 JSON 을 넣으면 Grafana 가 자동으로 읽는다.
+# 추천: grafana.com 에서 4701(JVM Micrometer), 19665(k6 Prometheus), 9628(PostgreSQL) 을 받아 넣는다.
+apiVersion: 1
+providers:
+  - name: loadtest
+    folder: loadtest
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards

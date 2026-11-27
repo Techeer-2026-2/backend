@@ -17,12 +17,13 @@ import com.techeer.backend.domain.impression.entity.AdImpression;
 import com.techeer.backend.domain.impression.repository.AdImpressionRepository;
 import com.techeer.backend.domain.stats.entity.CampaignStats;
 import com.techeer.backend.domain.stats.repository.CampaignStatsRepository;
-import com.techeer.backend.domain.targetuser.entity.TargetUser;
-import com.techeer.backend.domain.targetuser.repository.TargetUserRepository;
+import com.techeer.backend.domain.user.entity.User;
+import com.techeer.backend.domain.user.repository.UserRepository;
 import com.techeer.backend.domain.banner.service.BannerService;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -57,7 +58,7 @@ class BannerApiIntegrationTest {
     private MockMvc mockMvc;
 
     @Autowired
-    private TargetUserRepository targetUserRepository;
+    private UserRepository userRepository;
 
     @Autowired
     private CampaignRepository campaignRepository;
@@ -83,16 +84,16 @@ class BannerApiIntegrationTest {
         campaignStatsRepository.deleteAll();
         adImpressionRepository.deleteAll();
         campaignRepository.deleteAll();
-        targetUserRepository.deleteAll();
+        userRepository.deleteAll();
     }
 
     @Test
     @DisplayName("연령대가 맞는 진행 중 캠페인을 배너로 돌려주고 노출을 기록한다")
     void matchesActiveCampaignByAgeGroup() throws Exception {
-        TargetUser user = saveUser(AGE_20S);
+        User user = saveUser(AGE_20S);
         Campaign campaign = saveCampaign(AGE_20S, CampaignStatus.ACTIVE, daysFromNow(-1), daysFromNow(1));
 
-        String responseBody = mockMvc.perform(matchRequest(user.getTargetUserId()))
+        String responseBody = mockMvc.perform(matchRequest(user.getUserId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.campaignId").value(campaign.getCampaignId()))
                 .andExpect(jsonPath("$.title").value(campaign.getTitle()))
@@ -102,7 +103,7 @@ class BannerApiIntegrationTest {
         String notificationId = JsonPath.read(responseBody, "$.notificationId");
         AdImpression impression = adImpressionRepository.findById(notificationId).orElseThrow();
         assertThat(impression.getCampaignId()).isEqualTo(campaign.getCampaignId());
-        assertThat(impression.getTargetUserId()).isEqualTo(user.getTargetUserId());
+        assertThat(impression.getUserId()).isEqualTo(user.getUserId());
 
         CampaignStats stats = campaignStatsRepository.findById(campaign.getCampaignId()).orElseThrow();
         assertThat(stats.getSentCount()).isEqualTo(1);
@@ -112,11 +113,11 @@ class BannerApiIntegrationTest {
     @Test
     @DisplayName("노출마다 새 notificationId 가 발급되고 노출 수가 누적된다")
     void eachMatchIsANewImpression() throws Exception {
-        TargetUser user = saveUser(AGE_20S);
+        User user = saveUser(AGE_20S);
         Campaign campaign = saveCampaign(AGE_20S, CampaignStatus.ACTIVE, daysFromNow(-1), daysFromNow(1));
 
-        mockMvc.perform(matchRequest(user.getTargetUserId())).andExpect(status().isOk());
-        mockMvc.perform(matchRequest(user.getTargetUserId())).andExpect(status().isOk());
+        mockMvc.perform(matchRequest(user.getUserId())).andExpect(status().isOk());
+        mockMvc.perform(matchRequest(user.getUserId())).andExpect(status().isOk());
 
         assertThat(adImpressionRepository.count()).isEqualTo(2);
         assertThat(campaignStatsRepository.findById(campaign.getCampaignId()).orElseThrow().getSentCount())
@@ -126,13 +127,13 @@ class BannerApiIntegrationTest {
     @Test
     @DisplayName("다른 연령대, 진행 중이 아닌 상태, 기간 밖의 캠페인은 매칭되지 않아 204 를 돌려준다")
     void returnsNoContentWhenNothingMatches() throws Exception {
-        TargetUser user = saveUser(AGE_20S);
+        User user = saveUser(AGE_20S);
         saveCampaign(AGE_30S, CampaignStatus.ACTIVE, daysFromNow(-1), daysFromNow(1));
         saveCampaign(AGE_20S, CampaignStatus.PAUSED, daysFromNow(-1), daysFromNow(1));
         saveCampaign(AGE_20S, CampaignStatus.ACTIVE, daysFromNow(-3), daysFromNow(-1));
         saveCampaign(AGE_20S, CampaignStatus.ACTIVE, daysFromNow(1), daysFromNow(3));
 
-        mockMvc.perform(matchRequest(user.getTargetUserId()))
+        mockMvc.perform(matchRequest(user.getUserId()))
                 .andExpect(status().isNoContent());
 
         assertThat(adImpressionRepository.count()).isZero();
@@ -142,10 +143,10 @@ class BannerApiIntegrationTest {
     @Test
     @DisplayName("노출 기간이 비어 있는 캠페인은 기간 제한 없이 매칭된다")
     void matchesCampaignWithoutPeriod() throws Exception {
-        TargetUser user = saveUser(AGE_20S);
+        User user = saveUser(AGE_20S);
         Campaign campaign = saveCampaign(AGE_20S, CampaignStatus.ACTIVE, null, null);
 
-        mockMvc.perform(matchRequest(user.getTargetUserId()))
+        mockMvc.perform(matchRequest(user.getUserId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.campaignId").value(campaign.getCampaignId()));
     }
@@ -153,10 +154,10 @@ class BannerApiIntegrationTest {
     @Test
     @DisplayName("배너 응답의 notificationId 로 클릭을 기록할 수 있다")
     void matchedBannerCanBeClicked() throws Exception {
-        TargetUser user = saveUser(AGE_20S);
+        User user = saveUser(AGE_20S);
         Campaign campaign = saveCampaign(AGE_20S, CampaignStatus.ACTIVE, daysFromNow(-1), daysFromNow(1));
 
-        String responseBody = mockMvc.perform(matchRequest(user.getTargetUserId()))
+        String responseBody = mockMvc.perform(matchRequest(user.getUserId()))
                 .andReturn().getResponse().getContentAsString();
         String notificationId = JsonPath.read(responseBody, "$.notificationId");
 
@@ -171,42 +172,54 @@ class BannerApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("존재하지 않는 유저는 404 를 돌려준다")
+    @DisplayName("존재하지 않는 회원은 404 를 돌려준다")
     void unknownUserReturnsNotFound() throws Exception {
         mockMvc.perform(matchRequest(999_999L))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("TARGET_USER_NOT_FOUND"));
+                .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
     }
 
     @Test
-    @DisplayName("targetUserId 가 없거나 숫자가 아니면 400 을 돌려준다")
-    void invalidTargetUserIdReturnsBadRequest() throws Exception {
+    @DisplayName("회원 식별 헤더가 없거나 숫자가 아니면 400 을 돌려준다")
+    void missingOrInvalidMemberIdReturnsBadRequest() throws Exception {
         mockMvc.perform(get("/api/v1/banners/match"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("MISSING_MEMBER_ID"));
 
-        mockMvc.perform(get("/api/v1/banners/match").param("targetUserId", "abc"))
+        mockMvc.perform(get("/api/v1/banners/match").header("X-Member-Id", "abc"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_MEMBER_ID"));
+    }
+
+    @Test
+    @DisplayName("연령대를 입력하지 않은 회원은 맞는 캠페인이 있어도 204 이고 노출을 기록하지 않는다")
+    void userWithoutAgeGroupGetsNoBanner() throws Exception {
+        User user = userRepository.save(User.create(uniqueEmail(), "hash", "나이 미입력"));
+        saveTargetedCampaign(Set.of(AGE_20S), Set.of("all"), daysFromNow(-1), daysFromNow(1));
+
+        mockMvc.perform(matchRequest(user.getUserId()))
+                .andExpect(status().isNoContent());
+
+        assertThat(adImpressionRepository.count()).isZero();
     }
 
     @Test
     @DisplayName("유저 성별이 캠페인 성별 목록에 없으면 노출하지 않는다")
     void doesNotMatchWhenGenderDiffers() throws Exception {
-        TargetUser maleUser = saveUser(AGE_20S, "M");
+        User maleUser = saveUser(AGE_20S, "male");
         saveTargetedCampaign(Set.of(AGE_20S), Set.of("female"), daysFromNow(-1), daysFromNow(1));
 
-        mockMvc.perform(matchRequest(maleUser.getTargetUserId()))
+        mockMvc.perform(matchRequest(maleUser.getUserId()))
                 .andExpect(status().isNoContent());
     }
 
     @Test
     @DisplayName("성별이 all 이면 성별과 상관없이 노출한다")
     void allGenderMatchesAnyUser() throws Exception {
-        TargetUser maleUser = saveUser(AGE_20S, "M");
+        User maleUser = saveUser(AGE_20S, "male");
         Campaign campaign = saveTargetedCampaign(Set.of(AGE_20S), Set.of("all"), daysFromNow(-1), daysFromNow(1));
 
-        mockMvc.perform(matchRequest(maleUser.getTargetUserId()))
+        mockMvc.perform(matchRequest(maleUser.getUserId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.campaignId").value(campaign.getCampaignId()));
     }
@@ -214,12 +227,12 @@ class BannerApiIntegrationTest {
     @Test
     @DisplayName("노출마다 경쟁 입찰가로 차감액을 정해 기록하고 예산에서 뺀다")
     void chargesBySecondBidAndDeductsBudget() throws Exception {
-        TargetUser user = saveUser(AGE_20S);
+        User user = saveUser(AGE_20S);
         Campaign high = saveBidCampaign(AGE_20S, 100_000, 50);
         Campaign low = saveBidCampaign(AGE_20S, 100_000, 30);
 
         for (int i = 0; i < 40; i++) {
-            mockMvc.perform(matchRequest(user.getTargetUserId())).andExpect(status().isOk());
+            mockMvc.perform(matchRequest(user.getUserId())).andExpect(status().isOk());
         }
 
         List<AdImpression> impressions = adImpressionRepository.findAll();
@@ -242,16 +255,16 @@ class BannerApiIntegrationTest {
     @Test
     @DisplayName("예산이 이번 차감액보다 적게 남은 캠페인은 노출하지 않는다")
     void skipsCampaignWithoutEnoughBudget() throws Exception {
-        TargetUser user = saveUser(AGE_20S);
+        User user = saveUser(AGE_20S);
         Campaign exhausted = saveBidCampaign(AGE_20S, 100, 50);
         jdbcTemplate.update("UPDATE campaigns SET spent_total = 60 WHERE campaign_id = ?", exhausted.getCampaignId());
 
         // 남은 예산 40 < 차감액 50 이라 후보에서 빠지고, 다른 후보가 없으니 204
-        mockMvc.perform(matchRequest(user.getTargetUserId())).andExpect(status().isNoContent());
+        mockMvc.perform(matchRequest(user.getUserId())).andExpect(status().isNoContent());
 
         // 입찰가가 더 높은 경쟁자가 있어도 exhausted 의 차감액은 자기 입찰가(50)라 여전히 노출할 수 없다
         Campaign other = saveBidCampaign(AGE_20S, 100_000, 60);
-        mockMvc.perform(matchRequest(user.getTargetUserId()))
+        mockMvc.perform(matchRequest(user.getUserId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.campaignId").value(other.getCampaignId()));
         assertThat(campaignRepository.findById(exhausted.getCampaignId()).orElseThrow().getSpentTotal()).isEqualTo(60);
@@ -260,7 +273,7 @@ class BannerApiIntegrationTest {
     @Test
     @DisplayName("동시에 매칭 요청이 와도 예산을 넘겨 차감하지 않는다")
     void doesNotOverspendUnderConcurrency() throws Exception {
-        TargetUser user = saveUser(AGE_20S);
+        User user = saveUser(AGE_20S);
         Campaign campaign = saveBidCampaign(AGE_20S, 500, 50); // 정확히 10번 노출할 예산
 
         int requests = 30;
@@ -270,7 +283,7 @@ class BannerApiIntegrationTest {
         for (int i = 0; i < requests; i++) {
             results.add(pool.submit(() -> {
                 start.await();
-                return bannerService.matchBanner(user.getTargetUserId()).isPresent();
+                return bannerService.matchBanner(user.getUserId()).isPresent();
             }));
         }
         long shown = 0;
@@ -296,11 +309,11 @@ class BannerApiIntegrationTest {
     @Test
     @DisplayName("연령대 목록 중 하나와 맞고 성별도 맞으면 노출한다")
     void matchesWhenAgeIsOneOfSeveralAndGenderMatches() throws Exception {
-        TargetUser user = saveUser(AGE_30S, "F");
+        User user = saveUser(AGE_30S, "female");
         Campaign campaign = saveTargetedCampaign(Set.of(AGE_20S, AGE_30S), Set.of("female"),
                 daysFromNow(-1), daysFromNow(1));
 
-        mockMvc.perform(matchRequest(user.getTargetUserId()))
+        mockMvc.perform(matchRequest(user.getUserId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.campaignId").value(campaign.getCampaignId()));
     }
@@ -319,11 +332,14 @@ class BannerApiIntegrationTest {
                 .build());
     }
 
-    private TargetUser saveUser(String ageGroup, String gender) {
-        return targetUserRepository.save(TargetUser.builder()
-                .ageGroup(ageGroup)
-                .gender(gender)
-                .build());
+    private User saveUser(String ageGroup, String gender) {
+        User user = User.create(uniqueEmail(), "hash", "청취자");
+        user.changeDemographics(ageGroup, gender);
+        return userRepository.save(user);
+    }
+
+    private String uniqueEmail() {
+        return UUID.randomUUID() + "@techeer.com";
     }
 
     private Campaign saveTargetedCampaign(Set<String> ageGroups, Set<String> genders,
@@ -343,11 +359,8 @@ class BannerApiIntegrationTest {
                 .build());
     }
 
-    private TargetUser saveUser(String ageGroup) {
-        return targetUserRepository.save(TargetUser.builder()
-                .ageGroup(ageGroup)
-                .gender("F")
-                .build());
+    private User saveUser(String ageGroup) {
+        return saveUser(ageGroup, "female");
     }
 
     private Campaign saveCampaign(String ageGroup, CampaignStatus status,
@@ -370,7 +383,7 @@ class BannerApiIntegrationTest {
         return LocalDateTime.now().plusDays(days);
     }
 
-    private RequestBuilder matchRequest(Long targetUserId) {
-        return get("/api/v1/banners/match").param("targetUserId", String.valueOf(targetUserId));
+    private RequestBuilder matchRequest(Long memberId) {
+        return get("/api/v1/banners/match").header("X-Member-Id", String.valueOf(memberId));
     }
 }
