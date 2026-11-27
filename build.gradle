@@ -86,3 +86,10 @@ tasks.named('test') {
 		exceptionFormat 'full'
 	}
 }
+
+// clickhouse-jdbc 와 kafka-clients 가 서로 다른 lz4-java 를 끌어와 테스트 클래스패스가 깨지므로 한 버전으로 고정한다.
+configurations.all {
+	resolutionStrategy.capabilitiesResolution.withCapability('org.lz4:lz4-java') {
+		select('at.yawk.lz4:lz4-java:1.11.4')
+	}
+}
