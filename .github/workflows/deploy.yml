@@ -44,26 +44,41 @@ jobs:
       - name: 서버 .env 작성 (GitHub Secrets 에서)
         # 값은 GitHub production 환경 Secrets 에서만 온다. 서버에는 권한 600 으로 저장된다.
         # 주의: 이 파일은 통째로 새로 쓴다. 서버에만 두던 값은 여기 있어야 다음 배포에서 지워지지 않는다.
+        # 비밀 값은 환경변수로 받고 printf 로 쓴다 (셸이 값 안의 $ 나 ` 를 해석하지 않도록).
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          CLICKHOUSE_PASSWORD: ${{ secrets.CLICKHOUSE_PASSWORD }}
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+          TMAP_APP_KEY: ${{ secrets.TMAP_APP_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         run: |
+          set -euo pipefail
+          ENV_FILE="$RUNNER_TEMP/prod.env"
+          umask 077
+          {
+            echo "POSTGRES_DB=commute_playlist"
+            echo "POSTGRES_USER=commute"
+            printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
+            printf 'JWT_SECRET=%s\n' "$JWT_SECRET"
+            printf 'CLICKHOUSE_PASSWORD=%s\n' "$CLICKHOUSE_PASSWORD"
+            printf 'OPENWEATHER_API_KEY=%s\n' "$OPENWEATHER_API_KEY"
+            printf 'KAKAO_REST_API_KEY=%s\n' "$KAKAO_REST_API_KEY"
+            printf 'TMAP_APP_KEY=%s\n' "$TMAP_APP_KEY"
+            printf 'ANTHROPIC_API_KEY=%s\n' "$ANTHROPIC_API_KEY"
+            echo "S3_BUCKET=onbeat-prod-banner-229385463624"
+            echo "S3_REGION=ap-northeast-2"
+            echo "S3_PUBLIC_BASE_URL=https://onbeat-prod-banner-229385463624.s3.ap-northeast-2.amazonaws.com"
+            echo "RAW_S3_BUCKET=onbeat-prod-raw-229385463624"
+            echo "RAW_S3_REGION=ap-northeast-2"
+            echo "CORS_ALLOWED_ORIGINS=https://d7iao7vwjl5mi.cloudfront.net,https://d2w3hn5omhhtbo.cloudfront.net"
+            printf 'GRAFANA_ADMIN_PASSWORD=%s\n' "$GRAFANA_ADMIN_PASSWORD"
+          } > "$ENV_FILE"
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "umask 077 && cat > ~/backend/.env" <<ENVFILE
-          POSTGRES_DB=commute_playlist
-          POSTGRES_USER=commute
-          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
-          CLICKHOUSE_PASSWORD=${{ secrets.CLICKHOUSE_PASSWORD }}
-          OPENWEATHER_API_KEY=${{ secrets.OPENWEATHER_API_KEY }}
-          KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}
-          TMAP_APP_KEY=${{ secrets.TMAP_APP_KEY }}
-          ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
-          S3_BUCKET=onbeat-prod-banner-229385463624
-          S3_REGION=ap-northeast-2
-          S3_PUBLIC_BASE_URL=https://onbeat-prod-banner-229385463624.s3.ap-northeast-2.amazonaws.com
-          RAW_S3_BUCKET=onbeat-prod-raw-229385463624
-          RAW_S3_REGION=ap-northeast-2
-          CORS_ALLOWED_ORIGINS=https://d7iao7vwjl5mi.cloudfront.net,https://d2w3hn5omhhtbo.cloudfront.net
-          GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-          ENVFILE
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "umask 077 && cat > ~/backend/.env" < "$ENV_FILE"
+          rm -f "$ENV_FILE"
 
       - name: EC2 에서 재배포
         # ⚠️ 프리티어(t2/t3.micro, 1GB) OOM 주의:
