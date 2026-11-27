@@ -42,16 +42,6 @@ class RecomputeConfiguration {
                 Duration.ofMinutes(1), consumer::archive);
     }
 
-    @Bean
-    @Profile("!recompute-command")
-    @ConditionalOnProperty(name = "click.copy.enabled", havingValue = "true")
-    KafkaBatchConsumer clickCopyConsumer(KafkaProperties kafka, ObjectMapper mapper, JdbcTemplate jdbc,
-            TransactionTemplate transaction, @Value("${click.copy.batch-size:500}") int batchSize) {
-        var consumer = new ClickCopyConsumer(mapper, jdbc, transaction);
-        return new KafkaBatchConsumer(kafka, "click-copy", List.of(AdEvent.CLICKED), 1, batchSize,
-                Duration.ofSeconds(1), consumer::copy);
-    }
-
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnProperty(name = "recompute.enabled", havingValue = "true")
     static class Jobs {
