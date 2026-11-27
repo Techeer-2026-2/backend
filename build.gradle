@@ -41,6 +41,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'com.github.librepdf:openpdf:1.3.30'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	// 부하 테스트(loadtest 프로필)에서 /actuator/prometheus 로 지표를 내보낸다. 엔드포인트 노출은 프로필에서만 켠다.
+	runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 	implementation 'com.uber:h3:4.5.0'
 	implementation 'org.flywaydb:flyway-core'
 	runtimeOnly 'org.flywaydb:flyway-database-postgresql'

@@ -1,0 +1,61 @@
+# 부하 테스트용 compose 덮어쓰기 파일. backend 폴더에서 기본 compose 와 함께 쓴다.
+#   docker compose -f docker-compose.yml -f loadtest/docker-compose.loadtest.yml up -d
+# (경로는 첫 번째 파일 기준이라 ./loadtest/... 로 적는다)
+#
+# 개발 데이터를 지우지 않도록 같은 PostgreSQL 안의 별도 DB(LOADTEST_DB)를 쓴다.
+# DB 는 scripts/setup.sh 가 만든다.
+services:
+  db:
+    # pg_stat_statements 는 서버 시작 시 로드해야 해서 명령을 덮어쓴다.
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - max_connections=200
+
+  backend:
+    environment:
+      SPRING_PROFILES_ACTIVE: local,loadtest
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${LOADTEST_DB:-commute_playlist_loadtest}
+      AUTH_LEGACY_MEMBER_HEADER: "true"
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: cp-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      # k6 의 --out experimental-prometheus-rw 결과를 받는다.
+      - --web.enable-remote-write-receiver
+      - --enable-feature=native-histograms
+    volumes:
+      - ./loadtest/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - backend
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: cp-grafana
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    volumes:
+      - ./loadtest/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
+    container_name: cp-postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER:-cp_user}:${POSTGRES_PASSWORD:-cp_password}@db:5432/${LOADTEST_DB:-commute_playlist_loadtest}?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
