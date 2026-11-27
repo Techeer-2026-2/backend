@@ -27,8 +27,13 @@ public class AdImpression extends BaseEntity {
     @Column(nullable = false)
     private Long campaignId;
 
-    @Column(nullable = false)
-    private Long targetUserId;
+    /**
+     * 배너를 본 음악 앱 회원 ID (users.user_id).
+     * 예전에는 target_users 를 가리켰다. 컬럼 이름을 바꾸면 ddl-auto: update 인 DB 에 옛 NOT NULL 컬럼이 남아
+     * INSERT 가 깨지므로 이름은 그대로 둔다.
+     */
+    @Column(name = "target_user_id", nullable = false)
+    private Long userId;
 
     @Column(nullable = false)
     private LocalDateTime shownAt;
@@ -53,18 +58,18 @@ public class AdImpression extends BaseEntity {
      *
      * @param notificationId 노출을 식별하는 알림 ID
      * @param campaignId 노출된 캠페인 ID
-     * @param targetUserId 노출 대상 사용자 ID
+     * @param userId 배너를 본 음악 앱 회원 ID
      * @param shownAt 배너가 노출된 시각
      * @param chargedAmount 이 노출로 차감한 금액(원)
      * @param ageGroup 노출 당시 유저 연령대 (모르면 null)
      * @param gender 노출 당시 유저 성별 (모르면 null)
      */
     @Builder
-    private AdImpression(String notificationId, Long campaignId, Long targetUserId, LocalDateTime shownAt,
+    private AdImpression(String notificationId, Long campaignId, Long userId, LocalDateTime shownAt,
             long chargedAmount, String ageGroup, String gender) {
         this.notificationId = notificationId;
         this.campaignId = campaignId;
-        this.targetUserId = targetUserId;
+        this.userId = userId;
         this.shownAt = shownAt;
         this.chargedAmount = chargedAmount;
         this.ageGroup = ageGroup;

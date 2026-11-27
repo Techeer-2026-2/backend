@@ -5,7 +5,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.techeer.backend.ClickFactsFixture;
 import com.techeer.backend.TestcontainersConfiguration;
+import com.techeer.backend.global.config.ClickHouseConfig;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import com.techeer.backend.domain.advertiser.entity.Advertiser;
 import com.techeer.backend.domain.advertiser.repository.AdvertiserRepository;
 import com.techeer.backend.domain.auth.jwt.JwtTokenProvider;
@@ -66,6 +70,10 @@ class CampaignHistoryApiIntegrationTest {
     @Autowired
     private Clock clock;
 
+    @Autowired
+    @Qualifier(ClickHouseConfig.QUALIFIER)
+    private NamedParameterJdbcTemplate clickHouseJdbc;
+
     private Advertiser advertiser;
     private Advertiser other;
     private LocalDateTime now;
@@ -85,6 +93,7 @@ class CampaignHistoryApiIntegrationTest {
         campaignStatsRepository.deleteAll();
         campaignRepository.deleteAll();
         advertiserRepository.deleteAll();
+        ClickFactsFixture.clear(clickHouseJdbc);
     }
 
     /**
@@ -258,14 +267,13 @@ class CampaignHistoryApiIntegrationTest {
                 .build());
     }
 
+    /** 노출 수는 PostgreSQL campaign_stats 에, 누적 클릭 수는 ClickHouse click_facts 에 넣는다. */
     private void increase(long campaignId, int sent, int click) {
         transactionTemplate.executeWithoutResult(status -> {
             for (int i = 0; i < sent; i++) {
                 campaignStatsRepository.increaseSentCount(campaignId, now);
             }
-            for (int i = 0; i < click; i++) {
-                campaignStatsRepository.increaseClickCount(campaignId, now);
-            }
         });
+        ClickFactsFixture.addClicks(clickHouseJdbc, campaignId, click);
     }
 }

@@ -102,17 +102,13 @@ CREATE TABLE campaigns (  -- 캠페인 (위치 컬럼 삭제됨, 연령대 타�
     created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
 );
 
-CREATE TABLE target_users (  -- 타겟(가상) 유저
-    target_user_id BIGINT PRIMARY KEY,
-    age_group VARCHAR(16),
-    gender VARCHAR(8),
-    created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
-);
+-- target_users 는 쓰지 않는다. 배너는 음악 앱 회원(users)의 age_group·gender 로 매칭한다
+-- (docs/context/design/db/2026-11-19-banner-match-by-member.md)
 
 CREATE TABLE ad_impressions (  -- 신규: 노출 기록 (클릭률 계산용)
     notification_id VARCHAR(36) PRIMARY KEY,
     campaign_id BIGINT REFERENCES campaigns(campaign_id),
-    target_user_id BIGINT REFERENCES target_users(target_user_id),
+    target_user_id BIGINT,  -- 이름은 옛 그대로, 값은 users.user_id
     shown_at TIMESTAMP,
     created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
 );
@@ -121,7 +117,7 @@ CREATE TABLE click_events (  -- 클릭 원본 (notification_id UNIQUE로 멱등�
     click_id BIGINT PRIMARY KEY,
     notification_id VARCHAR(36) UNIQUE REFERENCES ad_impressions(notification_id),
     campaign_id BIGINT,
-    target_user_id BIGINT,
+    target_user_id BIGINT,  -- 이름은 옛 그대로, 값은 users.user_id
     clicked_at TIMESTAMP,
     created_at TIMESTAMP, updated_at TIMESTAMP, deleted_at TIMESTAMP
 );

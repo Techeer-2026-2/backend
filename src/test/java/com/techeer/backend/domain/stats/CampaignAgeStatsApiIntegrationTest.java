@@ -4,7 +4,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.techeer.backend.StatsFactsFixture;
 import com.techeer.backend.TestcontainersConfiguration;
+import com.techeer.backend.global.config.ClickHouseConfig;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import com.techeer.backend.domain.auth.jwt.JwtTokenProvider;
 import com.techeer.backend.domain.campaign.entity.Campaign;
 import com.techeer.backend.domain.campaign.entity.CampaignStatus;
@@ -55,11 +59,16 @@ class CampaignAgeStatsApiIntegrationTest {
         jdbcTemplate.update("DELETE FROM ad_impressions");
     }
 
+    @Autowired
+    @Qualifier(ClickHouseConfig.QUALIFIER)
+    private NamedParameterJdbcTemplate clickHouseJdbc;
+
     @AfterEach
     void tearDown() {
         jdbcTemplate.update("DELETE FROM click_events");
         jdbcTemplate.update("DELETE FROM ad_impressions");
         campaignRepository.deleteAll();
+        StatsFactsFixture.clear(clickHouseJdbc);
     }
 
     @Test
@@ -67,11 +76,12 @@ class CampaignAgeStatsApiIntegrationTest {
     void countsByAgeGroup() throws Exception {
         Campaign campaign = saveCampaign();
         LocalDateTime at = LocalDateTime.of(2026, 11, 10, 9, 0);
-        String click20 = saveImpression(campaign, "20s", at);
+        saveImpression(campaign, "20s", at);
         saveImpression(campaign, "20s", at);
         saveImpression(campaign, "30s", at);
         saveImpression(campaign, null, at);
-        saveClick(campaign, click20, at);
+        saveClick(campaign, "20s", at);
+        saveImpression(campaign, "20s", LocalDateTime.of(2026, 11, 11, 9, 0));  // 기간 밖이라 빠진다
 
         mockMvc.perform(get(url(campaign) + "?from=2026-11-10T00:00:00&to=2026-11-11T00:00:00")
                         .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
@@ -121,19 +131,12 @@ class CampaignAgeStatsApiIntegrationTest {
                 .build());
     }
 
-    private String saveImpression(Campaign campaign, String ageGroup, LocalDateTime shownAt) {
-        String id = UUID.randomUUID().toString();
-        jdbcTemplate.update(
-                "INSERT INTO ad_impressions (notification_id, campaign_id, target_user_id, shown_at, age_group,"
-                        + " created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                id, campaign.getCampaignId(), 1L, shownAt, ageGroup, shownAt, shownAt);
-        return id;
+    /** 노출, 클릭 수는 ClickHouse 분 표에서 읽으므로 거기에 넣는다. ageGroup 이 null 이면 unknown. */
+    private void saveImpression(Campaign campaign, String ageGroup, LocalDateTime shownAt) {
+        StatsFactsFixture.addImpression(clickHouseJdbc, campaign.getCampaignId(), shownAt, ageGroup);
     }
 
-    private void saveClick(Campaign campaign, String notificationId, LocalDateTime clickedAt) {
-        jdbcTemplate.update(
-                "INSERT INTO click_events (notification_id, campaign_id, target_user_id, clicked_at, created_at, updated_at)"
-                        + " VALUES (?, ?, ?, ?, ?, ?)",
-                notificationId, campaign.getCampaignId(), 1L, clickedAt, clickedAt, clickedAt);
+    private void saveClick(Campaign campaign, String ageGroup, LocalDateTime clickedAt) {
+        StatsFactsFixture.addClick(clickHouseJdbc, campaign.getCampaignId(), clickedAt, ageGroup);
     }
 }

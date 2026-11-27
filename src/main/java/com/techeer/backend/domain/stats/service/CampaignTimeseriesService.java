@@ -3,9 +3,10 @@ package com.techeer.backend.domain.stats.service;
 import com.techeer.backend.domain.advertiser.repository.AdvertiserRepository;
 import com.techeer.backend.domain.campaign.entity.Campaign;
 import com.techeer.backend.domain.campaign.repository.CampaignRepository;
-import com.techeer.backend.domain.click.repository.ClickEventRepository;
 import com.techeer.backend.domain.impression.repository.AdImpressionRepository;
 import com.techeer.backend.domain.stats.dto.CampaignTimeseriesBucket;
+import com.techeer.backend.domain.stats.repository.StatsFactsRepository;
+import com.techeer.backend.domain.stats.repository.StatsFactsRepository.Fact;
 import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
 import java.sql.Timestamp;
@@ -20,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 캠페인의 노출·클릭 추이를 시간 또는 일 단위로 만든다.
- * 노출과 클릭은 각각 원본 표(ad_impressions, click_events)를 센다. 기록이 없는 구간은 0으로 채운다.
+ * 노출과 클릭은 ClickHouse 집계 표에서, 소진액은 PostgreSQL ad_impressions 에서 읽는다. 기록이 없는 구간은 0으로 채운다.
  */
 @Service
 @Transactional(readOnly = true)
@@ -34,18 +35,18 @@ public class CampaignTimeseriesService {
     private final AdvertiserRepository advertiserRepository;
     private final CampaignRepository campaignRepository;
     private final AdImpressionRepository adImpressionRepository;
-    private final ClickEventRepository clickEventRepository;
+    private final StatsFactsRepository statsFactsRepository;
     private final Clock clock;
 
     public CampaignTimeseriesService(AdvertiserRepository advertiserRepository,
             CampaignRepository campaignRepository,
             AdImpressionRepository adImpressionRepository,
-            ClickEventRepository clickEventRepository,
+            StatsFactsRepository statsFactsRepository,
             Clock clock) {
         this.advertiserRepository = advertiserRepository;
         this.campaignRepository = campaignRepository;
         this.adImpressionRepository = adImpressionRepository;
-        this.clickEventRepository = clickEventRepository;
+        this.statsFactsRepository = statsFactsRepository;
         this.clock = clock;
     }
 
@@ -75,8 +76,9 @@ public class CampaignTimeseriesService {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
 
-        Map<LocalDateTime, Long> impressions = toCounts(adImpressionRepository.countByBucket(campaignId, unit, start, end));
-        Map<LocalDateTime, Long> clicks = toCounts(clickEventRepository.countByBucket(campaignId, unit, start, end));
+        // 노출, 클릭 수는 ClickHouse 집계 표에서, 소진액은 돈이라 PostgreSQL ad_impressions.charged_amount 합계에서 읽는다.
+        Map<LocalDateTime, Long> impressions = statsFactsRepository.countByBucket(Fact.IMPRESSION, campaignId, unit, start, end);
+        Map<LocalDateTime, Long> clicks = statsFactsRepository.countByBucket(Fact.CLICK, campaignId, unit, start, end);
         Map<LocalDateTime, Long> spent = toCounts(adImpressionRepository.sumChargedByBucket(campaignId, unit, start, end));
 
         java.util.ArrayList<CampaignTimeseriesBucket> result = new java.util.ArrayList<>();

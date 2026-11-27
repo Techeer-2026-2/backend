@@ -3,7 +3,11 @@ package com.techeer.backend.domain.stats;
 import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.techeer.backend.ClickFactsFixture;
 import com.techeer.backend.TestcontainersConfiguration;
+import com.techeer.backend.global.config.ClickHouseConfig;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import com.techeer.backend.domain.auth.jwt.JwtTokenProvider;
 import com.techeer.backend.domain.campaign.entity.Campaign;
 import com.techeer.backend.domain.campaign.entity.CampaignStatus;
@@ -74,6 +78,10 @@ class CampaignStatsStreamApiIntegrationTest {
     @Autowired
     private Clock clock;
 
+    @Autowired
+    @Qualifier(ClickHouseConfig.QUALIFIER)
+    private NamedParameterJdbcTemplate clickHouseJdbc;
+
     /**
      * 각 테스트가 만든 캠페인과 집계를 삭제해 다음 테스트를 격리한다.
      */
@@ -81,6 +89,7 @@ class CampaignStatsStreamApiIntegrationTest {
     void tearDown() {
         campaignStatsRepository.deleteAll();
         campaignRepository.deleteAll();
+        ClickFactsFixture.clear(clickHouseJdbc);
     }
 
     /**
@@ -302,11 +311,8 @@ class CampaignStatsStreamApiIntegrationTest {
         });
     }
 
+    /** 누적 클릭 수는 ClickHouse click_facts 에서 읽으므로 거기에 넣는다. */
     private void increaseClick(long campaignId, int times) {
-        transactionTemplate.executeWithoutResult(status -> {
-            for (int i = 0; i < times; i++) {
-                campaignStatsRepository.increaseClickCount(campaignId, LocalDateTime.now(clock));
-            }
-        });
+        ClickFactsFixture.addClicks(clickHouseJdbc, campaignId, times);
     }
 }
