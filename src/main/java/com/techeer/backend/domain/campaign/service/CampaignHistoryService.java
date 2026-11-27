@@ -6,6 +6,7 @@ import com.techeer.backend.domain.campaign.entity.Campaign;
 import com.techeer.backend.domain.campaign.repository.CampaignRepository;
 import com.techeer.backend.domain.stats.entity.CampaignStats;
 import com.techeer.backend.domain.stats.repository.CampaignStatsRepository;
+import com.techeer.backend.domain.stats.repository.ClickFactsRepository;
 import com.techeer.backend.global.dto.PageResponse;
 import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
@@ -31,6 +32,7 @@ public class CampaignHistoryService {
     private final AdvertiserRepository advertiserRepository;
     private final CampaignRepository campaignRepository;
     private final CampaignStatsRepository campaignStatsRepository;
+    private final ClickFactsRepository clickFactsRepository;
     private final Clock clock;
 
     /**
@@ -60,13 +62,15 @@ public class CampaignHistoryService {
         List<Long> campaignIds = campaigns.getContent().stream().map(Campaign::getCampaignId).toList();
         Map<Long, CampaignStats> statsByCampaignId = campaignStatsRepository.findAllById(campaignIds).stream()
                 .collect(Collectors.toMap(CampaignStats::getCampaignId, Function.identity()));
+        // 누적 클릭은 ClickHouse click_facts 에서 읽는다 (campaign_stats.click_count 는 더 이상 갱신되지 않음).
+        Map<Long, Long> clicksByCampaignId = clickFactsRepository.sumClicksByCampaign(campaignIds);
 
         return PageResponse.from(campaigns.map(campaign -> {
             CampaignStats stats = statsByCampaignId.get(campaign.getCampaignId());
             return CampaignHistoryItem.of(
                     campaign,
                     stats == null ? 0 : stats.getSentCount(),
-                    stats == null ? 0 : stats.getClickCount());
+                    clicksByCampaignId.getOrDefault(campaign.getCampaignId(), 0L));
         }));
     }
 }

@@ -6,6 +6,7 @@ import com.techeer.backend.domain.stats.client.ClaudeMessageClient;
 import com.techeer.backend.domain.stats.dto.CampaignSummaryResponse;
 import com.techeer.backend.domain.stats.entity.CampaignStats;
 import com.techeer.backend.domain.stats.repository.CampaignStatsRepository;
+import com.techeer.backend.domain.stats.repository.ClickFactsRepository;
 import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
 import java.time.Clock;
@@ -31,6 +32,7 @@ public class CampaignSummaryService {
     private final ClaudeMessageClient claudeMessageClient;
     private final AdImpressionRepository adImpressionRepository;
     private final ClickEventRepository clickEventRepository;
+    private final ClickFactsRepository clickFactsRepository;
     private final Clock clock;
 
     public CampaignSummaryService(CampaignRepository campaignRepository,
@@ -38,12 +40,14 @@ public class CampaignSummaryService {
             ClaudeMessageClient claudeMessageClient,
             AdImpressionRepository adImpressionRepository,
             ClickEventRepository clickEventRepository,
+            ClickFactsRepository clickFactsRepository,
             Clock clock) {
         this.campaignRepository = campaignRepository;
         this.campaignStatsRepository = campaignStatsRepository;
         this.claudeMessageClient = claudeMessageClient;
         this.adImpressionRepository = adImpressionRepository;
         this.clickEventRepository = clickEventRepository;
+        this.clickFactsRepository = clickFactsRepository;
         this.clock = clock;
     }
 
@@ -134,7 +138,8 @@ public class CampaignSummaryService {
 
         CampaignStats stats = campaignStatsRepository.findById(campaignId).orElse(null);
         long impressions = stats == null ? 0 : stats.getSentCount();
-        long clicks = stats == null ? 0 : stats.getClickCount();
+        // 누적 클릭은 ClickHouse click_facts 에서 읽는다 (campaign_stats.click_count 는 더 이상 갱신되지 않음).
+        long clicks = clickFactsRepository.sumClicks(campaignId);
         LocalDateTime now = LocalDateTime.now(clock);
         String prompt = buildPrompt(campaign, impressions, clicks, ageBreakdown(campaignId, campaign, now), now);
         return new CampaignSummaryResponse(campaignId, claudeMessageClient.complete(prompt));
