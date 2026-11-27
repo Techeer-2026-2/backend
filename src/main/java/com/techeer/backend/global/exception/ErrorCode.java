@@ -50,7 +50,11 @@ public enum ErrorCode {
     // 타겟 유저
     TARGET_USER_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 유저입니다."),
 
+    // 클릭
+    CLICK_PUBLISH_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "클릭을 기록하지 못했습니다. 다시 시도해 주세요."),
+
     // 노출
+    BANNER_REQUEST_ID_REQUIRED(HttpStatus.BAD_REQUEST, "X-Request-Id 헤더가 필요합니다."),
     IMPRESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 알림(notification_id)입니다."),
 
     // 음악 앱 회원 식별

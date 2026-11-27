@@ -51,6 +51,10 @@ import org.springframework.test.web.servlet.RequestBuilder;
 @Import(TestcontainersConfiguration.class)
 class BannerApiIntegrationTest {
 
+    // 카프카 발행은 목으로 바꿔 클릭 응답(201)을 확정적으로 확인한다 (실제 카프카 동작은 EventPublisherTest 와 통합 테스트에서 본다).
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.techeer.backend.domain.outbox.EventPublisher eventPublisher;
+
     private static final String AGE_20S = "20s";
     private static final String AGE_30S = "30s";
 
@@ -168,7 +172,8 @@ class BannerApiIntegrationTest {
 
         CampaignStats stats = campaignStatsRepository.findById(campaign.getCampaignId()).orElseThrow();
         assertThat(stats.getSentCount()).isEqualTo(1);
-        assertThat(stats.getClickCount()).isEqualTo(1);
+        // 클릭은 요청 경로에서 DB 집계를 하지 않고 Kafka 로 보낸다. 집계는 ClickHouse 와 재계산이 맡는다.
+        assertThat(stats.getClickCount()).isZero();
     }
 
     @Test
@@ -182,11 +187,11 @@ class BannerApiIntegrationTest {
     @Test
     @DisplayName("회원 식별 헤더가 없거나 숫자가 아니면 400 을 돌려준다")
     void missingOrInvalidMemberIdReturnsBadRequest() throws Exception {
-        mockMvc.perform(get("/api/v1/banners/match"))
+        mockMvc.perform(get("/api/v1/banners/match").header("X-Request-Id", UUID.randomUUID().toString()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("MISSING_MEMBER_ID"));
 
-        mockMvc.perform(get("/api/v1/banners/match").header("X-Member-Id", "abc"))
+        mockMvc.perform(get("/api/v1/banners/match").header("X-Member-Id", "abc").header("X-Request-Id", UUID.randomUUID().toString()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_MEMBER_ID"));
     }
@@ -384,6 +389,6 @@ class BannerApiIntegrationTest {
     }
 
     private RequestBuilder matchRequest(Long memberId) {
-        return get("/api/v1/banners/match").header("X-Member-Id", String.valueOf(memberId));
+        return get("/api/v1/banners/match").header("X-Member-Id", String.valueOf(memberId)).header("X-Request-Id", UUID.randomUUID().toString());
     }
 }
