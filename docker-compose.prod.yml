@@ -120,6 +120,9 @@ services:
       S3_BUCKET: ${S3_BUCKET:-}
       S3_REGION: ${S3_REGION:-ap-northeast-2}
       S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
+      # 재계산 원본 저장 버킷 (S3 원본 보관)
+      RAW_S3_BUCKET: ${RAW_S3_BUCKET:-}
+      RAW_S3_REGION: ${RAW_S3_REGION:-ap-northeast-2}
       # 광고 파이프라인 (compose 네트워크 안의 주소)
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       CLICKHOUSE_URL: jdbc:clickhouse://clickhouse:8123/default
