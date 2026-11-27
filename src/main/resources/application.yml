@@ -138,3 +138,25 @@ clickhouse:
 logging:
   level:
     com.techeer.backend: ${LOG_LEVEL:INFO}
+
+# 광고 파이프라인 인프라와 수동 스키마 적용 후 활성화한다.
+raw:
+  enabled: false
+  s3:
+    bucket: ${RAW_S3_BUCKET:}
+    region: ${RAW_S3_REGION:ap-northeast-2}
+    endpoint: ""
+
+recompute:
+  enabled: false
+  cron: "0 0 3 * * *"
+  window-days: 2
+  sql-location: "classpath:clickhouse/recompute"
+
+reconcile:
+  cron: "0 30 3 * * *"
+
+click:
+  copy:
+    enabled: false
+    batch-size: 500
