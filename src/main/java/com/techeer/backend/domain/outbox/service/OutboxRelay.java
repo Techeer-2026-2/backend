@@ -1,5 +1,6 @@
 package com.techeer.backend.domain.outbox.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.techeer.backend.domain.outbox.EventPublishException;
@@ -31,8 +32,13 @@ public class OutboxRelay {
     @Scheduled(fixedDelayString = "${relay.outbox.interval-ms:1000}")
     public void relay() {
         for (OutboxEvent row : outboxEventRepository.findTop500ByStatusOrderByOutboxIdAsc(OutboxEvent.Status.PENDING)) {
+            String key = campaignKey(row.getPayload());
+            if (key == null) {
+                log.error("아웃박스 본문을 읽지 못해 이 행만 건너뜀: id={}", row.getOutboxId());
+                continue;
+            }
             try {
-                eventPublisher.publish(EventPublisher.AD_IMPRESSED, campaignKey(row.getPayload()), row.getPayload());
+                eventPublisher.publish(EventPublisher.AD_IMPRESSED, key, row.getPayload());
             } catch (EventPublishException e) {
                 log.warn("아웃박스 발행 실패, 다음 주기에 재시도: outbox_id={}", row.getOutboxId(), e);
                 return;
@@ -50,13 +56,13 @@ public class OutboxRelay {
         }
     }
 
-    /** 키는 campaign_id 문자열. 같은 캠페인은 같은 파티션으로 가서 순서가 유지된다. */
+    /** 키는 campaign_id 문자열. 읽지 못하면 null 을 돌려주고, 호출한 쪽이 그 행만 건너뛴다. */
     private String campaignKey(String payload) {
         try {
-            JsonNode node = objectMapper.readTree(payload);
-            return node.get("campaign_id").asText();
-        } catch (Exception e) {
-            throw new EventPublishException("아웃박스 본문에서 campaign_id 를 읽지 못함", e);
+            JsonNode campaignId = objectMapper.readTree(payload).get("campaign_id");
+            return campaignId == null || campaignId.isNull() ? null : campaignId.asText();
+        } catch (JsonProcessingException e) {
+            return null;
         }
     }
 }
