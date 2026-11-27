@@ -17,7 +17,7 @@ import lombok.NoArgsConstructor;
  * 광고주(캠페인을 만드는 사람). campaigns.user_id 가 이 테이블의 user_id 를 가리킨다.
  *
  * <p>음악 앱의 일반 유저 테이블(users)과 이름이 겹치지 않도록 테이블 이름을 advertisers 로 둔다.
- * 배너를 보는 쪽은 target_users 이다.
+ * 배너를 보는 쪽은 음악 앱 회원(users)이다.
  *
  * <p>setter 를 두지 않는다. 값을 바꿀 일이 생기면 그 목적에 맞는 메서드(예: changeBusinessName)를 추가한다.
  */
