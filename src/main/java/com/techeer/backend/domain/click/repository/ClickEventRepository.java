@@ -29,13 +29,13 @@ public interface ClickEventRepository extends JpaRepository<ClickEvent, Long> {
     @Modifying
     @Query(value = """
             INSERT INTO click_events (notification_id, campaign_id, target_user_id, clicked_at, created_at, updated_at)
-            VALUES (:notificationId, :campaignId, :targetUserId, :clickedAt, :clickedAt, :clickedAt)
+            VALUES (:notificationId, :campaignId, :userId, :clickedAt, :clickedAt, :clickedAt)
             ON CONFLICT (notification_id) DO NOTHING
             """, nativeQuery = true)
     int insertIfAbsent(
             @Param("notificationId") String notificationId,
             @Param("campaignId") Long campaignId,
-            @Param("targetUserId") Long targetUserId,
+            @Param("userId") Long userId,
             @Param("clickedAt") LocalDateTime clickedAt);
 
     /**

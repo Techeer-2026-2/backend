@@ -28,14 +28,18 @@ public class UserService {
     }
 
     /**
-     * 닉네임을 수정한다. 영속 상태의 엔티티 값을 바꾸면 트랜잭션이 끝날 때 JPA 가 UPDATE 를 실행한다(더티 체킹).
+     * 닉네임·연령대·성별을 수정한다. 보내지 않은(null) 값은 그대로 둔다.
+     * 영속 상태의 엔티티 값을 바꾸면 트랜잭션이 끝날 때 JPA 가 UPDATE 를 실행한다(더티 체킹).
      *
      * @throws BusinessException 없거나 탈퇴한 회원인 경우
      */
     @Transactional
     public UserResponse updateMe(Long userId, UpdateUserRequest request) {
         User user = findActive(userId);
-        user.changeNickname(request.nickname());
+        if (request.nickname() != null) {
+            user.changeNickname(request.nickname());
+        }
+        user.changeDemographics(request.ageGroup(), request.gender());
         return UserResponse.from(user);
     }
 
