@@ -1,0 +1,29 @@
+# 부하 테스트 전용 프로필. local 뒤에 붙여 쓴다: SPRING_PROFILES_ACTIVE=local,loadtest
+# 운영(prod)에서는 쓰지 않는다. 지표 엔드포인트를 열기 때문이다.
+spring:
+  jpa:
+    # local 의 SQL 로그는 콘솔 출력만으로도 응답 시간을 크게 늘려서 측정에서는 끈다.
+    show-sql: false
+  datasource:
+    hikari:
+      # 기준선의 병목이 커넥션 풀(10)과 엮여 있어서, 단계 간 비교가 섞이지 않게 모든 단계에서 같은 값으로 고정한다.
+      # 대조 측정할 때만 DB_POOL_SIZE 로 바꾸고, 바꾼 값은 기록에 적는다.
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+
+logging:
+  level:
+    com.techeer.backend: INFO
+    org.hibernate.SQL: WARN
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  metrics:
+    distribution:
+      # Grafana 에서 histogram_quantile 로 p50/p95/p99 를 계산할 수 있게 버킷을 내보낸다.
+      percentiles-histogram:
+        http.server.requests: true
+    tags:
+      application: commute-playlist-backend

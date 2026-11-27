@@ -2,6 +2,8 @@ package com.techeer.backend.domain.banner.controller;
 
 import com.techeer.backend.domain.banner.dto.BannerResponse;
 import com.techeer.backend.domain.banner.service.BannerService;
+import com.techeer.backend.global.exception.BusinessException;
+import com.techeer.backend.global.exception.ErrorCode;
 import com.techeer.backend.global.exception.ErrorResponse;
 import com.techeer.backend.global.resolver.MemberId;
 import io.swagger.v3.oas.annotations.Operation;
@@ -10,9 +12,11 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -40,8 +44,14 @@ public class BannerController {
     @ApiResponse(responseCode = "404", description = "없거나 탈퇴한 회원",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @GetMapping("/banners/match")
-    public ResponseEntity<BannerResponse> matchBanner(@Parameter(hidden = true) @MemberId Long memberId) {
-        return bannerService.matchBanner(memberId)
+    public ResponseEntity<BannerResponse> matchBanner(
+            @Parameter(hidden = true) @MemberId Long memberId,
+            @Parameter(description = "요청 ID (UUID). 재시도는 같은 값을 보낸다. 없으면 400")
+            @RequestHeader(value = "X-Request-Id", required = false) String requestId) {
+        if (requestId == null || requestId.isBlank() || requestId.length() > 64) {
+            throw new BusinessException(ErrorCode.BANNER_REQUEST_ID_REQUIRED);
+        }
+        return bannerService.matchBanner(memberId, requestId)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }
