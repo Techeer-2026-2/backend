@@ -33,8 +33,9 @@ public class ClickEvent extends BaseEntity {
     @Column(nullable = false)
     private Long campaignId;
 
-    @Column(nullable = false)
-    private Long targetUserId;
+    /** 클릭한 음악 앱 회원 ID (users.user_id). 컬럼 이름을 그대로 두는 이유는 AdImpression#userId 와 같다. */
+    @Column(name = "target_user_id", nullable = false)
+    private Long userId;
 
     @Column(nullable = false)
     private LocalDateTime clickedAt;

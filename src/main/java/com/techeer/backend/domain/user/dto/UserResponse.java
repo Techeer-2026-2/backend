@@ -9,12 +9,15 @@ public record UserResponse(
         @Schema(description = "회원 ID", example = "1") Long userId,
         @Schema(description = "이메일", example = "listener@techeer.com") String email,
         @Schema(description = "닉네임", example = "출근러") String nickname,
+        @Schema(description = "연령대 (입력하지 않았으면 null)", example = "20s") String ageGroup,
+        @Schema(description = "성별 (입력하지 않았으면 null)", example = "female") String gender,
         @Schema(description = "가입 시각") LocalDateTime createdAt) {
 
     /**
      * 엔티티에서 응답에 필요한 값만 꺼내 만든다. 엔티티를 그대로 반환하지 않기 위한 변환이다.
      */
     public static UserResponse from(User user) {
-        return new UserResponse(user.getUserId(), user.getEmail(), user.getNickname(), user.getCreatedAt());
+        return new UserResponse(user.getUserId(), user.getEmail(), user.getNickname(),
+                user.getAgeGroup(), user.getGender(), user.getCreatedAt());
     }
 }

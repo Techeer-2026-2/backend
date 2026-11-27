@@ -3,7 +3,9 @@ package com.techeer.backend.domain.stats.service;
 import com.techeer.backend.domain.campaign.entity.Campaign;
 import com.techeer.backend.domain.campaign.repository.CampaignRepository;
 import com.techeer.backend.domain.stats.dto.CampaignStatsEvent;
+import com.techeer.backend.domain.stats.entity.CampaignStats;
 import com.techeer.backend.domain.stats.repository.CampaignStatsRepository;
+import com.techeer.backend.domain.stats.repository.ClickFactsRepository;
 import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
 import jakarta.annotation.PreDestroy;
@@ -31,6 +33,7 @@ public class CampaignStatsStreamService {
 
     private final CampaignRepository campaignRepository;
     private final CampaignStatsRepository campaignStatsRepository;
+    private final ClickFactsRepository clickFactsRepository;
     private final long intervalMillis;
     private final long timeoutMillis;
     private final ScheduledExecutorService scheduler;
@@ -39,10 +42,12 @@ public class CampaignStatsStreamService {
     public CampaignStatsStreamService(
             CampaignRepository campaignRepository,
             CampaignStatsRepository campaignStatsRepository,
+            ClickFactsRepository clickFactsRepository,
             @Value("${stats.stream.interval-ms:2000}") long intervalMillis,
             @Value("${stats.stream.timeout-ms:1800000}") long timeoutMillis) {
         this.campaignRepository = campaignRepository;
         this.campaignStatsRepository = campaignStatsRepository;
+        this.clickFactsRepository = clickFactsRepository;
         this.intervalMillis = intervalMillis;
         this.timeoutMillis = timeoutMillis;
 
@@ -129,12 +134,14 @@ public class CampaignStatsStreamService {
     }
 
     /**
-     * 집계 행이 아직 없는 캠페인(노출이 한 번도 없음)은 0, 0 으로 본다.
+     * 노출 수는 PostgreSQL campaign_stats, 누적 클릭 수는 ClickHouse click_facts 에서 읽는다.
+     * 집계 행이 아직 없는 캠페인(노출이 한 번도 없음)은 노출 0 으로 본다.
      */
     CampaignStatsEvent snapshot(Long campaignId) {
-        return campaignStatsRepository.findById(campaignId)
-                .map(stats -> CampaignStatsEvent.of(campaignId, stats.getSentCount(), stats.getClickCount()))
-                .orElseGet(() -> CampaignStatsEvent.of(campaignId, 0, 0));
+        long sent = campaignStatsRepository.findById(campaignId)
+                .map(CampaignStats::getSentCount)
+                .orElse(0L);
+        return CampaignStatsEvent.of(campaignId, sent, clickFactsRepository.sumClicks(campaignId));
     }
 
     @PreDestroy

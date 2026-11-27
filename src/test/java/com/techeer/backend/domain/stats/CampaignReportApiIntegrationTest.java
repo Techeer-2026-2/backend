@@ -6,7 +6,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.techeer.backend.StatsFactsFixture;
 import com.techeer.backend.TestcontainersConfiguration;
+import com.techeer.backend.global.config.ClickHouseConfig;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import com.techeer.backend.domain.advertiser.entity.Advertiser;
 import com.techeer.backend.domain.advertiser.repository.AdvertiserRepository;
 import com.techeer.backend.domain.auth.jwt.JwtTokenProvider;
@@ -66,12 +70,17 @@ class CampaignReportApiIntegrationTest {
         jdbcTemplate.update("DELETE FROM ad_impressions");
     }
 
+    @Autowired
+    @Qualifier(ClickHouseConfig.QUALIFIER)
+    private NamedParameterJdbcTemplate clickHouseJdbc;
+
     @AfterEach
     void tearDown() {
         advertiserRepository.deleteAll();
         jdbcTemplate.update("DELETE FROM click_events");
         jdbcTemplate.update("DELETE FROM ad_impressions");
         campaignRepository.deleteAll();
+        StatsFactsFixture.clear(clickHouseJdbc);
     }
 
     @Test
@@ -141,17 +150,17 @@ class CampaignReportApiIntegrationTest {
                 .build());
     }
 
+    /** 노출 원본은 PostgreSQL 에, 노출 수 집계는 ClickHouse impression_facts 에 넣는다. */
     private void saveImpression(Campaign campaign, LocalDateTime shownAt) {
         jdbcTemplate.update(
                 "INSERT INTO ad_impressions (notification_id, campaign_id, target_user_id, shown_at, created_at, updated_at)"
                         + " VALUES (?, ?, ?, ?, ?, ?)",
                 UUID.randomUUID().toString(), campaign.getCampaignId(), 1L, shownAt, shownAt, shownAt);
+        StatsFactsFixture.addImpression(clickHouseJdbc, campaign.getCampaignId(), shownAt, "20s");
     }
 
+    /** 클릭 수는 ClickHouse click_facts 에서 읽으므로 거기에 넣는다. */
     private void saveClick(Campaign campaign, LocalDateTime clickedAt) {
-        jdbcTemplate.update(
-                "INSERT INTO click_events (notification_id, campaign_id, target_user_id, clicked_at, created_at, updated_at)"
-                        + " VALUES (?, ?, ?, ?, ?, ?)",
-                UUID.randomUUID().toString(), campaign.getCampaignId(), 1L, clickedAt, clickedAt, clickedAt);
+        StatsFactsFixture.addClick(clickHouseJdbc, campaign.getCampaignId(), clickedAt, "20s");
     }
 }
