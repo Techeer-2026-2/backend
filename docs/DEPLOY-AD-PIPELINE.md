@@ -12,7 +12,8 @@
 | 4 | **운영 DB SQL 먼저 적용** | 새 코드가 `outbox`, `banner_requests`, `click_fallback` 표를 바로 씀. 순서는 `운영_DB_적용_순서.md` |
 | 5 | **프론트(#84) 먼저 배포** | `/banners/match` 는 `X-Request-Id` 헤더가 **필수**. 프론트가 안 보내면 400 |
 
-> ⚠️ 현재 `docker-compose.prod.yml` 에는 Kafka·ClickHouse 서비스와 `KAFKA_BOOTSTRAP_SERVERS`·`CLICKHOUSE_URL` 설정이 **없습니다**. 위 1~3을 해결하지 않으면 배포는 실패합니다. 이 부분은 아직 고치지 않았습니다.
+> ✅ 운영 `docker-compose.prod.yml` 에 kafka · kafka-init · clickhouse 와 백엔드 환경변수를 추가했습니다 (PR chore/prod-kafka-clickhouse). **EC2 에 `CLICKHOUSE_PASSWORD` 를 `~/backend/.env` 에 넣어야 합니다.**
+> ⚠️ EC2 가 프리티어(1GB)면 메모리가 부족할 수 있습니다. 서버 사양을 먼저 정하세요.
 
 ## 📋 배포 순서
 
