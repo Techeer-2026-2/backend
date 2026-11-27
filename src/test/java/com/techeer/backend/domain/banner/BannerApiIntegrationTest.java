@@ -51,6 +51,10 @@ import org.springframework.test.web.servlet.RequestBuilder;
 @Import(TestcontainersConfiguration.class)
 class BannerApiIntegrationTest {
 
+    // 카프카 발행은 목으로 바꿔 클릭 응답(201)을 확정적으로 확인한다 (실제 카프카 동작은 EventPublisherTest 와 통합 테스트에서 본다).
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.techeer.backend.domain.outbox.EventPublisher eventPublisher;
+
     private static final String AGE_20S = "20s";
     private static final String AGE_30S = "30s";
 
