@@ -2,15 +2,14 @@ package com.techeer.backend.domain.stats.service;
 
 import com.techeer.backend.domain.campaign.entity.Campaign;
 import com.techeer.backend.domain.campaign.repository.CampaignRepository;
-import com.techeer.backend.domain.click.repository.ClickEventRepository;
-import com.techeer.backend.domain.impression.repository.AdImpressionRepository;
 import com.techeer.backend.domain.stats.dto.CampaignAgeStats;
+import com.techeer.backend.domain.stats.repository.StatsFactsRepository;
+import com.techeer.backend.domain.stats.repository.StatsFactsRepository.Fact;
 import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -28,17 +27,14 @@ public class CampaignAgeStatsService {
     private static final int DEFAULT_DAYS = 7;
 
     private final CampaignRepository campaignRepository;
-    private final AdImpressionRepository adImpressionRepository;
-    private final ClickEventRepository clickEventRepository;
+    private final StatsFactsRepository statsFactsRepository;
     private final Clock clock;
 
     public CampaignAgeStatsService(CampaignRepository campaignRepository,
-            AdImpressionRepository adImpressionRepository,
-            ClickEventRepository clickEventRepository,
+            StatsFactsRepository statsFactsRepository,
             Clock clock) {
         this.campaignRepository = campaignRepository;
-        this.adImpressionRepository = adImpressionRepository;
-        this.clickEventRepository = clickEventRepository;
+        this.statsFactsRepository = statsFactsRepository;
         this.clock = clock;
     }
 
@@ -55,8 +51,9 @@ public class CampaignAgeStatsService {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
 
-        Map<String, Long> impressions = toCounts(adImpressionRepository.countByAgeGroup(campaignId, start, end));
-        Map<String, Long> clicks = toCounts(clickEventRepository.countByAgeGroup(campaignId, start, end));
+        // 노출, 클릭 수는 ClickHouse 분 표에서 읽는다. 연령을 모르는 기록은 "unknown" 으로 저장되어 있다.
+        Map<String, Long> impressions = statsFactsRepository.countByAgeGroup(Fact.IMPRESSION, campaignId, start, end);
+        Map<String, Long> clicks = statsFactsRepository.countByAgeGroup(Fact.CLICK, campaignId, start, end);
 
         List<CampaignAgeStats> result = new ArrayList<>();
         for (String age : AGE_GROUPS) {
@@ -70,13 +67,4 @@ public class CampaignAgeStatsService {
         return result;
     }
 
-    /** DB 의 null 연령대는 "unknown" 키로 옮긴다. */
-    private static Map<String, Long> toCounts(List<Object[]> rows) {
-        Map<String, Long> counts = new HashMap<>();
-        for (Object[] row : rows) {
-            String age = row[0] == null ? UNKNOWN : row[0].toString();
-            counts.merge(age, ((Number) row[1]).longValue(), Long::sum);
-        }
-        return counts;
-    }
 }
