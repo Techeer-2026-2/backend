@@ -7,3 +7,4 @@
 | [2026-10-16-weighted-random-with-limits](recommendation/2026-10-16-weighted-random-with-limits.md) | 제안 | 규칙표 가중치 + 가중 무작위 추출, 같은 가수 2곡·같은 장르 30%까지만 |
 | [2026-10-16-running-time-fit-in-generate](recommendation/2026-10-16-running-time-fit-in-generate.md) | 제안 | size 가 없고 경로 소요시간을 알면 어림 곡 수+5곡을 가중 무작위로 뽑은 뒤 그 순서대로 소요시간을 넘지 않게(또는 덜 넘치게) 담는다 |
 | [2026-11-23-loadtest-skeleton](loadtest/2026-11-23-loadtest-skeleton.md) | 제안 | 부하 테스트는 같은 PostgreSQL 안의 별도 DB 에 고정 시드를 넣고 local,loadtest 프로필로 측정한다 |
+| [2026-11-26-ad-archive-offsets](recompute/2026-11-26-ad-archive-offsets.md) | 제안 | Kafka poll 스레드가 배치 저장과 오프셋 커밋을 순서대로 실행한다 |
