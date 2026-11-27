@@ -1,0 +1,8 @@
+# 운영 Prometheus: 백엔드 지표만 긁는다. 포트는 서버 안(127.0.0.1)에서만 열린다.
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["backend:8080"]
