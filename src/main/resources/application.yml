@@ -27,6 +27,20 @@ spring:
         default_batch_fetch_size: 100
     open-in-view: false
 
+  kafka:
+    # 광고 파이프라인 (고도화 2026-11). 로컬은 docker-compose 의 Kafka 브로커 1대.
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:${KAFKA_PORT:9092}}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        delivery.timeout.ms: 30000
+        request.timeout.ms: 10000
+        linger.ms: 5
+        max.in.flight.requests.per.connection: 5
+
   jackson:
     default-property-inclusion: non_null
     time-zone: Asia/Seoul

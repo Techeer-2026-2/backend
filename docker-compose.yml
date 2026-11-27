@@ -1,5 +1,5 @@
 # 로컬 개발용 스택 — 팀원 누구나 `docker compose up -d` 한 번으로 동일 환경 기동
-# 현재 범위: PostgreSQL + API 서버. 고도화(2026-11)에서 Kafka·ClickHouse 서비스를 추가한다. Redis는 추가하지 않는다 (2026-11-22).
+# 현재 범위: PostgreSQL + Kafka(브로커 1대, 토픽 생성) + API 서버. ClickHouse 는 B 담당 작업에서 추가한다. Redis는 추가하지 않는다 (2026-11-22).
 services:
   db:
     image: postgres:16-alpine
@@ -19,6 +19,48 @@ services:
       timeout: 5s
       retries: 10
 
+  # 광고 파이프라인용 Kafka. 브로커 1대(KRaft), 복제 1. 학습·로컬용이며 운영 승격 때 3대로 늘린다.
+  kafka:
+    image: apache/kafka:3.8.0
+    container_name: cp-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,HOST://localhost:${KAFKA_PORT:-9092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      TZ: Asia/Seoul
+    ports:
+      - "127.0.0.1:${KAFKA_PORT:-9092}:29092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:9092 >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
+  # 토픽 2개를 만든 뒤 끝난다 (재실행해도 안전: --if-not-exists). 보관 7일 = retention.ms 604800000.
+  kafka-init:
+    image: apache/kafka:3.8.0
+    container_name: cp-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        for t in ad-impressed ad-clicked; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic $$t --partitions 3 --replication-factor 1
+          /opt/kafka/bin/kafka-configs.sh --bootstrap-server kafka:9092 --entity-type topics --entity-name $$t --alter --add-config retention.ms=604800000
+        done
+    restart: "no"
+
   backend:
     build:
       context: .
@@ -27,11 +69,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-commute_playlist}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-cp_user}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-cp_password}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
