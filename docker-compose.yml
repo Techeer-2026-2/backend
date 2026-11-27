@@ -42,8 +42,32 @@ services:
       S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      CLICKHOUSE_URL: jdbc:clickhouse://clickhouse:8123/default
     ports:
       - "${BACKEND_PORT:-8080}:8080"
 
+  # 광고 집계용 ClickHouse (고도화 2026-11). Kafka 메시지를 받아 분, 시간, 일 단위로 미리 센다.
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.8
+    container_name: cp-clickhouse
+    environment:
+      # 로컬 전용: 비밀번호 없는 default 사용자로 컨테이너 밖에서도 접속하게 한다 (아래 포트는 내 컴퓨터에서만 열린다).
+      CLICKHOUSE_SKIP_USER_SETUP: 1
+      TZ: Asia/Seoul
+    ports:
+      - "127.0.0.1:${CLICKHOUSE_PORT:-8123}:8123"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1' >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   db-data:
+  clickhouse-data:
