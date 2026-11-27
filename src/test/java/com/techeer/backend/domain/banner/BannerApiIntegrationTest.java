@@ -182,11 +182,11 @@ class BannerApiIntegrationTest {
     @Test
     @DisplayName("회원 식별 헤더가 없거나 숫자가 아니면 400 을 돌려준다")
     void missingOrInvalidMemberIdReturnsBadRequest() throws Exception {
-        mockMvc.perform(get("/api/v1/banners/match"))
+        mockMvc.perform(get("/api/v1/banners/match").header("X-Request-Id", UUID.randomUUID().toString()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("MISSING_MEMBER_ID"));
 
-        mockMvc.perform(get("/api/v1/banners/match").header("X-Member-Id", "abc"))
+        mockMvc.perform(get("/api/v1/banners/match").header("X-Member-Id", "abc").header("X-Request-Id", UUID.randomUUID().toString()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_MEMBER_ID"));
     }
@@ -384,6 +384,6 @@ class BannerApiIntegrationTest {
     }
 
     private RequestBuilder matchRequest(Long memberId) {
-        return get("/api/v1/banners/match").header("X-Member-Id", String.valueOf(memberId));
+        return get("/api/v1/banners/match").header("X-Member-Id", String.valueOf(memberId)).header("X-Request-Id", UUID.randomUUID().toString());
     }
 }
