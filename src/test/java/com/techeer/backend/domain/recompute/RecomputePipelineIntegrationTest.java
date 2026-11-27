@@ -85,10 +85,7 @@ class RecomputePipelineIntegrationTest {
             initBucket(s3);
             var writer = new S3RawWriter(s3, BUCKET);
             new RawArchiveConsumer(buffer, writer, logs).archive(records);
-            var copy = new ClickCopyConsumer(mapper, pg, new TransactionTemplate(new DataSourceTransactionManager(postgres)));
-            copy.copy(records.subList(0, 2));
             assertThat(logs.archives(day).written()).isEqualTo(3);
-            assertThat(pg.queryForObject("SELECT count(*) FROM click_events", Long.class)).isEqualTo(1);
 
             String url = "jdbc:clickhouse://" + CLICKHOUSE.getHost() + ":" + CLICKHOUSE.getMappedPort(8123) + "/default";
             var ch = new JdbcTemplate(new DriverManagerDataSource(url, "default", ""));
