@@ -37,7 +37,7 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       TZ: Asia/Seoul
     ports:
-      - "${KAFKA_PORT:-9092}:29092"
+      - "127.0.0.1:${KAFKA_PORT:-9092}:29092"
     healthcheck:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:9092 >/dev/null 2>&1"]
       interval: 5s
@@ -54,6 +54,7 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
+        set -e
         for t in ad-impressed ad-clicked; do
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic $$t --partitions 3 --replication-factor 1
           /opt/kafka/bin/kafka-configs.sh --bootstrap-server kafka:9092 --entity-type topics --entity-name $$t --alter --add-config retention.ms=604800000

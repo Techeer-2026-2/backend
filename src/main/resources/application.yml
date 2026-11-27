@@ -29,7 +29,7 @@ spring:
 
   kafka:
     # 광고 파이프라인 (고도화 2026-11). 로컬은 docker-compose 의 Kafka 브로커 1대.
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:${KAFKA_PORT:9092}}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
