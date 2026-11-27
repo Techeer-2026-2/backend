@@ -6,3 +6,4 @@
 | [2026-10-16-itunes-javascript-content-type](music/2026-10-16-itunes-javascript-content-type.md) | 제안 | /music/search 502 원인은 iTunes 의 text/javascript 응답이고 JSON 컨버터를 추가해 고쳤다 |
 | [2026-10-16-weighted-random-with-limits](recommendation/2026-10-16-weighted-random-with-limits.md) | 제안 | 규칙표 가중치 + 가중 무작위 추출, 같은 가수 2곡·같은 장르 30%까지만 |
 | [2026-10-16-running-time-fit-in-generate](recommendation/2026-10-16-running-time-fit-in-generate.md) | 제안 | size 가 없고 경로 소요시간을 알면 어림 곡 수+5곡을 가중 무작위로 뽑은 뒤 그 순서대로 소요시간을 넘지 않게(또는 덜 넘치게) 담는다 |
+| [2026-11-23-loadtest-skeleton](loadtest/2026-11-23-loadtest-skeleton.md) | 제안 | 부하 테스트는 같은 PostgreSQL 안의 별도 DB 에 고정 시드를 넣고 local,loadtest 프로필로 측정한다 |

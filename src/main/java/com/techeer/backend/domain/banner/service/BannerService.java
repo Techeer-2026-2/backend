@@ -6,8 +6,8 @@ import com.techeer.backend.domain.campaign.repository.CampaignRepository;
 import com.techeer.backend.domain.impression.entity.AdImpression;
 import com.techeer.backend.domain.impression.repository.AdImpressionRepository;
 import com.techeer.backend.domain.stats.repository.CampaignStatsRepository;
-import com.techeer.backend.domain.targetuser.entity.TargetUser;
-import com.techeer.backend.domain.targetuser.repository.TargetUserRepository;
+import com.techeer.backend.domain.user.entity.User;
+import com.techeer.backend.domain.user.repository.UserRepository;
 import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
 import java.time.Clock;
@@ -28,7 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class BannerService {
 
-    private final TargetUserRepository targetUserRepository;
+    private final UserRepository userRepository;
     private final CampaignRepository campaignRepository;
     private final AdImpressionRepository adImpressionRepository;
     private final CampaignStatsRepository campaignStatsRepository;
@@ -38,21 +38,26 @@ public class BannerService {
      * 후보 중 입찰가에 비례한 확률로 1개를 골라 예산을 차감하고 노출을 기록한다.
      * 고른 캠페인의 예산이 그 사이 모자라졌으면 그 캠페인을 빼고 다시 고른다.
      *
-     * @return 매칭되는, 예산이 남은 진행 중 캠페인이 없으면 empty
+     * @param memberId 배너를 볼 음악 앱 회원 ID (users.user_id)
+     * @return 매칭되는, 예산이 남은 진행 중 캠페인이 없거나 회원이 연령대를 입력하지 않았으면 empty
+     * @throws BusinessException 없거나 탈퇴한 회원인 경우
      */
     @Transactional
-    public Optional<BannerResponse> matchBanner(Long targetUserId) {
-        TargetUser targetUser = targetUserRepository.findById(targetUserId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.TARGET_USER_NOT_FOUND));
-
+    public Optional<BannerResponse> matchBanner(Long memberId) {
+        User user = userRepository.findByUserIdAndDeletedAtIsNull(memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        // 연령대는 모든 캠페인의 필수 타겟 조건이라, 모르면 맞는 캠페인이 없다.
+        if (user.getAgeGroup() == null) {
+            return Optional.empty();
+        }
         LocalDateTime now = LocalDateTime.now(clock);
         List<Campaign> candidates = new ArrayList<>(campaignRepository.findActiveForTarget(
-                targetUser.getAgeGroup(), toGenderCode(targetUser.getGender()), now));
+                user.getAgeGroup(), toGenderCode(user.getGender()), now));
         while (!candidates.isEmpty()) {
             Campaign winner = BidAuction.pick(candidates, ThreadLocalRandom.current().nextDouble());
             long charge = BidAuction.charge(winner, candidates);
             if (campaignRepository.deductBudget(winner.getCampaignId(), charge) == 1) {
-                return Optional.of(recordImpression(winner, targetUser, charge, now));
+                return Optional.of(recordImpression(winner, user, charge, now));
             }
             candidates.remove(winner);
         }
@@ -79,17 +84,17 @@ public class BannerService {
         return value == null || value.isBlank() ? null : value;
     }
 
-    private BannerResponse recordImpression(Campaign campaign, TargetUser targetUser, long charge,
+    private BannerResponse recordImpression(Campaign campaign, User user, long charge,
             LocalDateTime now) {
         String notificationId = UUID.randomUUID().toString();
         adImpressionRepository.save(AdImpression.builder()
                 .notificationId(notificationId)
                 .campaignId(campaign.getCampaignId())
-                .targetUserId(targetUser.getTargetUserId())
+                .userId(user.getUserId())
                 .shownAt(now)
                 .chargedAmount(charge)
-                .ageGroup(blankToNull(targetUser.getAgeGroup()))
-                .gender(blankToNull(toGenderCode(targetUser.getGender())))
+                .ageGroup(blankToNull(user.getAgeGroup()))
+                .gender(blankToNull(toGenderCode(user.getGender())))
                 .build());
         campaignStatsRepository.increaseSentCount(campaign.getCampaignId(), now);
         return BannerResponse.of(notificationId, campaign);

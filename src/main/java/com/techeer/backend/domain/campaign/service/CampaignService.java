@@ -9,6 +9,7 @@ import com.techeer.backend.domain.campaign.entity.Campaign;
 import com.techeer.backend.domain.campaign.entity.CampaignStatus;
 import com.techeer.backend.domain.campaign.repository.CampaignRepository;
 import com.techeer.backend.domain.stats.repository.CampaignStatsRepository;
+import com.techeer.backend.domain.stats.repository.ClickFactsRepository;
 import com.techeer.backend.global.exception.BusinessException;
 import com.techeer.backend.global.exception.ErrorCode;
 import com.techeer.backend.global.storage.ImageStorage;
@@ -39,6 +40,7 @@ public class CampaignService {
 
     private final CampaignRepository campaignRepository;
     private final CampaignStatsRepository campaignStatsRepository;
+    private final ClickFactsRepository clickFactsRepository;
     private final ImageStorage imageStorage;
     private final Clock clock;
 
@@ -92,11 +94,13 @@ public class CampaignService {
             campaignStatsRepository.findAllById(batch)
                     .forEach(stats -> statsById.put(stats.getCampaignId(), stats));
         }
+        // 누적 클릭은 ClickHouse click_facts 에서 읽는다 (campaign_stats.click_count 는 더 이상 갱신되지 않음).
+        java.util.Map<Long, Long> clicksById = clickFactsRepository.sumClicksByCampaign(campaignIds);
         return campaigns.stream()
                 .map(campaign -> {
                     com.techeer.backend.domain.stats.entity.CampaignStats stats = statsById.get(campaign.getCampaignId());
                     long sent = stats == null ? 0 : stats.getSentCount();
-                    long clicks = stats == null ? 0 : stats.getClickCount();
+                    long clicks = clicksById.getOrDefault(campaign.getCampaignId(), 0L);
                     return CampaignResponse.of(campaign, now, sent, clicks);
                 })
                 .filter(campaign -> progress == null || campaign.status() == progress)
@@ -294,9 +298,14 @@ public class CampaignService {
         }
     }
 
+    /**
+     * 노출 수는 PostgreSQL campaign_stats, 누적 클릭 수는 ClickHouse click_facts 에서 읽는다.
+     */
     private CampaignDetailResponse toDetail(Campaign campaign, LocalDateTime now) {
-        return campaignStatsRepository.findById(campaign.getCampaignId())
-                .map(stats -> CampaignDetailResponse.of(campaign, stats.getSentCount(), stats.getClickCount(), now))
-                .orElseGet(() -> CampaignDetailResponse.of(campaign, 0, 0, now));
+        long sent = campaignStatsRepository.findById(campaign.getCampaignId())
+                .map(com.techeer.backend.domain.stats.entity.CampaignStats::getSentCount)
+                .orElse(0L);
+        long clicks = clickFactsRepository.sumClicks(campaign.getCampaignId());
+        return CampaignDetailResponse.of(campaign, sent, clicks, now);
     }
 }
