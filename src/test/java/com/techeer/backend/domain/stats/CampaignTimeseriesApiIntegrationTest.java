@@ -4,7 +4,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.techeer.backend.StatsFactsFixture;
 import com.techeer.backend.TestcontainersConfiguration;
+import com.techeer.backend.global.config.ClickHouseConfig;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import com.techeer.backend.domain.advertiser.entity.Advertiser;
 import com.techeer.backend.domain.advertiser.repository.AdvertiserRepository;
 import com.techeer.backend.domain.auth.jwt.JwtTokenProvider;
@@ -63,12 +67,17 @@ class CampaignTimeseriesApiIntegrationTest {
         jdbcTemplate.update("DELETE FROM ad_impressions");
     }
 
+    @Autowired
+    @Qualifier(ClickHouseConfig.QUALIFIER)
+    private NamedParameterJdbcTemplate clickHouseJdbc;
+
     @AfterEach
     void tearDown() {
         advertiserRepository.deleteAll();
         jdbcTemplate.update("DELETE FROM click_events");
         jdbcTemplate.update("DELETE FROM ad_impressions");
         campaignRepository.deleteAll();
+        StatsFactsFixture.clear(clickHouseJdbc);
     }
 
     @Test
@@ -228,25 +237,42 @@ class CampaignTimeseriesApiIntegrationTest {
                 .andExpect(jsonPath("$[2].cpm").value(0.0));
     }
 
+    @Test
+    @DisplayName("기간이 자정에 맞지 않으면 분 표에서 구간 안의 기록만 센다")
+    void unalignedRangeCountsOnlyInsideRange() throws Exception {
+        Campaign campaign = saveCampaign();
+        saveImpression(campaign, LocalDateTime.of(2026, 11, 10, 9, 0));   // 시작 전이라 빠진다
+        saveImpression(campaign, LocalDateTime.of(2026, 11, 10, 10, 0));
+        saveClick(campaign, LocalDateTime.of(2026, 11, 10, 10, 5));
+        saveImpression(campaign, LocalDateTime.of(2026, 11, 11, 9, 0));
+        saveImpression(campaign, LocalDateTime.of(2026, 11, 11, 10, 0));  // 끝 뒤라 빠진다
+
+        mockMvc.perform(get(url(campaign) + "?from=2026-11-10T09:30:00&to=2026-11-11T09:30:00&granularity=day")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].bucketStart").value("2026-11-10T00:00:00"))
+                .andExpect(jsonPath("$[0].impressionCount").value(1))
+                .andExpect(jsonPath("$[0].clickCount").value(1))
+                .andExpect(jsonPath("$[1].impressionCount").value(1));
+    }
+
+    /** 소진액은 PostgreSQL ad_impressions 에, 노출 수는 ClickHouse impression_facts 에 넣는다. */
     private void saveImpression(Campaign campaign, LocalDateTime shownAt, long chargedAmount) {
         jdbcTemplate.update(
                 "INSERT INTO ad_impressions (notification_id, campaign_id, target_user_id, shown_at, charged_amount,"
                         + " created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 UUID.randomUUID().toString(), campaign.getCampaignId(), 1L, shownAt, chargedAmount,
                 shownAt, shownAt);
+        StatsFactsFixture.addImpression(clickHouseJdbc, campaign.getCampaignId(), shownAt, "20s");
     }
 
     private void saveImpression(Campaign campaign, LocalDateTime shownAt) {
-        jdbcTemplate.update(
-                "INSERT INTO ad_impressions (notification_id, campaign_id, target_user_id, shown_at, created_at, updated_at)"
-                        + " VALUES (?, ?, ?, ?, ?, ?)",
-                UUID.randomUUID().toString(), campaign.getCampaignId(), 1L, shownAt, shownAt, shownAt);
+        StatsFactsFixture.addImpression(clickHouseJdbc, campaign.getCampaignId(), shownAt, "20s");
     }
 
+    /** 클릭 수는 ClickHouse click_facts 에 넣는다. */
     private void saveClick(Campaign campaign, LocalDateTime clickedAt) {
-        jdbcTemplate.update(
-                "INSERT INTO click_events (notification_id, campaign_id, target_user_id, clicked_at, created_at, updated_at)"
-                        + " VALUES (?, ?, ?, ?, ?, ?)",
-                UUID.randomUUID().toString(), campaign.getCampaignId(), 1L, clickedAt, clickedAt, clickedAt);
+        StatsFactsFixture.addClick(clickHouseJdbc, campaign.getCampaignId(), clickedAt, "20s");
     }
 }
