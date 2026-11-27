@@ -1,5 +1,6 @@
 package com.techeer.backend.domain.click.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.techeer.backend.domain.click.entity.ClickFallback;
@@ -29,8 +30,13 @@ public class ClickFallbackResender {
     public void resend() {
         for (ClickFallback row : clickFallbackRepository
                 .findTop500ByStatusOrderByFallbackIdAsc(ClickFallback.Status.PENDING)) {
+            String key = campaignKey(row.getPayload());
+            if (key == null) {
+                log.error("보관 클릭 본문을 읽지 못해 이 행만 건너뜀: id={}", row.getFallbackId());
+                continue;
+            }
             try {
-                eventPublisher.publish(EventPublisher.AD_CLICKED, campaignKey(row.getPayload()), row.getPayload());
+                eventPublisher.publish(EventPublisher.AD_CLICKED, key, row.getPayload());
             } catch (EventPublishException e) {
                 log.warn("보관 클릭 재전송 실패, 다음 주기에 재시도: fallback_id={}", row.getFallbackId(), e);
                 return;
@@ -39,12 +45,13 @@ public class ClickFallbackResender {
         }
     }
 
+    /** 키는 campaign_id 문자열. 읽지 못하면 null 을 돌려주고, 호출한 쪽이 그 행만 건너뛴다. */
     private String campaignKey(String payload) {
         try {
-            JsonNode node = objectMapper.readTree(payload);
-            return node.get("campaign_id").asText();
-        } catch (Exception e) {
-            throw new EventPublishException("보관 본문에서 campaign_id 를 읽지 못함", e);
+            JsonNode campaignId = objectMapper.readTree(payload).get("campaign_id");
+            return campaignId == null || campaignId.isNull() ? null : campaignId.asText();
+        } catch (JsonProcessingException e) {
+            return null;
         }
     }
 }
